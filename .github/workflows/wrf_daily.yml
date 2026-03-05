@@ -55,6 +55,12 @@ jobs:
             libssl-dev libxml2-dev libfontconfig1-dev \
             libharfbuzz-dev libfribidi-dev libfreetype6-dev \
             libpng-dev libtiff5-dev libjpeg-dev
+          # Install tippecanoe for PMTiles export
+          sudo apt-get install -y --no-install-recommends git build-essential libsqlite3-dev zlib1g-dev
+          git clone https://github.com/felt/tippecanoe.git /tmp/tippecanoe
+          make -C /tmp/tippecanoe -j$(nproc)
+          sudo make -C /tmp/tippecanoe install
+          tippecanoe --version
 
       - name: Cache R packages
         id: r-cache
@@ -90,6 +96,38 @@ jobs:
         run: |
           mkdir -p outputs data/WRF_downloads
           Rscript scripts/00-geojson_output.R 2>&1 | tee outputs/run_log.txt
+
+      - name: Run PMTiles export
+        run: |
+          Rscript scripts/00-pmtiles_output.R 2>&1 | tee -a outputs/run_log.txt
+
+      - name: Write outputs/latest.json
+        run: |
+          GEOJSON=$(ls outputs/wrf_cep_forecast_*_nested.geojson 2>/dev/null | head -1)
+          if [ -n "$GEOJSON" ]; then
+            RUN_ID=$(basename "$GEOJSON" | grep -oP '\d{10}')
+          fi
+          if [ -z "${RUN_ID:-}" ]; then
+            if [ -n "$WRF_RUN_START" ]; then
+              RUN_ID=$(echo "$WRF_RUN_START" | sed 's/[^0-9]//g' | cut -c1-10)
+            else
+              RUN_ID=$(date -u +'%Y%m%d')00
+            fi
+          fi
+          GENERATED_AT=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          mkdir -p outputs
+          cat > outputs/latest.json <<EOF
+          {
+            "run_id": "${RUN_ID}",
+            "generated_at": "${GENERATED_AT}",
+            "geojson_url": "https://raw.githubusercontent.com/jessicajcss/WRF_CPTEC_rainfall/main/outputs/wrf_cep_forecast_${RUN_ID}_nested.geojson",
+            "ceps_xlsx_url": "https://raw.githubusercontent.com/jessicajcss/WRF_CPTEC_rainfall/main/data/ceps.xlsx",
+            "pmtiles_rain_now_url": "https://raw.githubusercontent.com/jessicajcss/WRF_CPTEC_rainfall/main/outputs/cep_rain_now.pmtiles",
+            "pmtiles_peak_24_url": "https://raw.githubusercontent.com/jessicajcss/WRF_CPTEC_rainfall/main/outputs/cep_peak_24.pmtiles"
+          }
+          EOF
+          echo "latest.json written:"
+          cat outputs/latest.json
 
       - name: Create GitHub Release and upload 72h GeoJSON gz
         env:
@@ -134,6 +172,7 @@ jobs:
           path: |
             outputs/*.geojson
             outputs/*.geojson.gz
+            outputs/*.pmtiles
             outputs/*.png
             outputs/run_log.txt
           retention-days: 30
@@ -144,7 +183,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
           # Stage only small files — NOT the large .geojson (goes to Release instead)
-          git add outputs/latest.json outputs/*.png outputs/run_log.txt 2>/dev/null || true
+          git add outputs/latest.json outputs/*.pmtiles outputs/*.png outputs/run_log.txt 2>/dev/null || true
 
           if git diff --staged --quiet; then
             echo "No changes to commit (forecast unchanged from previous run)."
