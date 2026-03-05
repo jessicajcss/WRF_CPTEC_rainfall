@@ -91,6 +91,25 @@ jobs:
           mkdir -p outputs data/WRF_downloads
           Rscript scripts/00-geojson_output.R 2>&1 | tee outputs/run_log.txt
 
+      - name: Write outputs/latest.json
+        run: |
+          if [ -n "$WRF_RUN_START" ]; then
+            RUN_ID=$(echo "$WRF_RUN_START" | sed 's/[^0-9]//g' | cut -c1-10)
+          else
+            RUN_ID=$(date -u +'%Y%m%d')00
+          fi
+          GENERATED_AT=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          cat > outputs/latest.json <<EOF
+          {
+            "run_id": "${RUN_ID}",
+            "generated_at": "${GENERATED_AT}",
+            "geojson_url": "https://raw.githubusercontent.com/jessicajcss/WRF_CPTEC_rainfall/main/outputs/wrf_cep_forecast_${RUN_ID}_nested.geojson",
+            "ceps_xlsx_url": "https://raw.githubusercontent.com/jessicajcss/WRF_CPTEC_rainfall/main/data/ceps.xlsx"
+          }
+          EOF
+          echo "latest.json written:"
+          cat outputs/latest.json
+
       - name: Upload forecast artifacts
         uses: actions/upload-artifact@v4
         if: always()

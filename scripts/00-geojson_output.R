@@ -1315,3 +1315,38 @@ if (GHA_MODE) {
 } else {
   print(p_map)
 }
+
+
+
+
+
+# =============================================================
+# STEP 7 — Write outputs/latest.json (Lovable pointer file)
+# =============================================================
+#
+# Always written in GHA mode so Lovable can always fetch:
+#   https://raw.githubusercontent.com/.../main/outputs/latest.json
+# and discover today's GeoJSON URL without hardcoding filenames.
+
+if (GHA_MODE) {
+  run_id       <- format(run_dt, "%Y%m%d%H")
+  generated_at <- format(lubridate::now(tzone = "UTC"), "%Y-%m-%dT%H:%M:%SZ")
+
+  latest <- list(
+    run_id       = run_id,
+    generated_at = generated_at,
+    geojson_url  = sprintf(
+      "https://raw.githubusercontent.com/jessicajcss/WRF_CPTEC_rainfall/main/outputs/wrf_cep_forecast_%s_nested.geojson",
+      run_id
+    ),
+    ceps_xlsx_url = "https://raw.githubusercontent.com/jessicajcss/WRF_CPTEC_rainfall/main/data/ceps.xlsx"
+  )
+
+  jsonlite::write_json(latest, "outputs/latest.json",
+                       auto_unbox = TRUE, pretty = TRUE)
+  message("latest.json written: outputs/latest.json")
+}
+
+
+
+
