@@ -1,0 +1,16 @@
+================================================================
+Run init  : 2026-03-05 00:00 UTC (00Z)
+Fcst hrs  : 0 to 72
+Base URL  : https://dataserver.cptec.inpe.br/dataserver_modelos/wrf/ams_07km/brutos/2026/03/05/00/
+Local dir : data/WRF_downloads/20260305
+Exclude   : inv
+================================================================
+
+Fetching file list from server...
+Files in window: 221
+  ctl     : 74
+  grib2   : 73
+  grib2.idx: 74
+
+Already on disk: 4  |  To download: 217
+
