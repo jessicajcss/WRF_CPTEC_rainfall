@@ -3,7 +3,6 @@ name: WRF Daily Rainfall Forecast
 on:
   schedule:
     - cron: '0 6 * * *'
-
   workflow_dispatch:
     inputs:
       run_start:
@@ -38,6 +37,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
       - name: Setup R
         id: setup-r
@@ -54,7 +54,8 @@ jobs:
             libudunits2-dev libcurl4-openssl-dev \
             libssl-dev libxml2-dev libfontconfig1-dev \
             libharfbuzz-dev libfribidi-dev libfreetype6-dev \
-            libpng-dev libtiff5-dev libjpeg-dev
+            libpng-dev libtiff5-dev libjpeg-dev \
+            jq gh
 
       - name: Cache R packages
         id: r-cache
@@ -74,82 +75,104 @@ jobs:
           pkgs <- pkgs[nzchar(pkgs) & !startsWith(pkgs, '#')]
           repos <- 'https://packagemanager.posit.co/cran/__linux__/jammy/latest'
           install.packages(pkgs, repos = repos, dependencies = TRUE)
-          cat('Installed:', length(pkgs), 'packages\n')
           "
 
       - name: Check required repo files
         run: |
-          echo "--- Checking required files ---"
-          test -f "data/shp/SC_Municipios_2024/SC_Municipios_2024.shp" \
-            || { echo "ERROR: shapefile not found."; exit 1; }
-          test -f "outputs/cep_list.rds" \
-            || { echo "ERROR: outputs/cep_list.rds not found."; exit 1; }
-          echo "All required files present."
+          set -euo pipefail
+          test -f "data/shp/SC_Municipios_2024/SC_Municipios_2024.shp" || { echo "Missing shapefile"; exit 1; }
+          test -f "outputs/cep_list.rds" || { echo "Missing outputs/cep_list.rds"; exit 1; }
 
-      - name: Run WRF forecast (72h)
+      - name: Run forecast script
         run: |
+          set -euo pipefail
           mkdir -p outputs data/WRF_downloads
           Rscript scripts/00-geojson_output.R 2>&1 | tee outputs/run_log.txt
 
-      - name: Create GitHub Release and upload 72h GeoJSON gz
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Validate latest outputs exist
         run: |
-          GEOJSON=$(ls outputs/wrf_cep_forecast_*_nested.geojson 2>/dev/null | head -1)
-          if [ -z "$GEOJSON" ]; then
-            echo "No GeoJSON found, skipping release upload."
-            exit 0
-          fi
+          set -euo pipefail
+          test -f outputs/latest.json || { echo "ERROR: outputs/latest.json missing"; exit 1; }
+          test -f outputs/latest.pmtiles || { echo "ERROR: outputs/latest.pmtiles missing"; exit 1; }
 
-          RUN_ID=$(basename "$GEOJSON" | grep -oP '\d{10}')
-          if [ -z "$RUN_ID" ]; then
-            echo "ERROR: Could not extract RUN_ID from filename: $GEOJSON"
-            exit 1
-          fi
-          GZ_FILE="${GEOJSON}.gz"
-          TAG="wrf-${RUN_ID}"
+      - name: Determine date label
+        id: dlabel
+        run: |
+          set -euo pipefail
+          LATEST_DATE="$(date -u +%Y-%m-%d)"
+          echo "latest_date=$LATEST_DATE" >> "$GITHUB_OUTPUT"
+          cp outputs/latest.json "outputs/${LATEST_DATE}.json"
+          cp outputs/latest.pmtiles "outputs/${LATEST_DATE}.pmtiles"
 
-          # Gzip the geojson (keep original with -k for artifact upload)
-          gzip -k "$GEOJSON"
+      - name: Enforce size safety limit (<95MB)
+        run: |
+          set -euo pipefail
+          max=$((95 * 1024 * 1024))
+          for f in outputs/latest.json outputs/latest.pmtiles "outputs/${{ steps.dlabel.outputs.latest_date }}.json" "outputs/${{ steps.dlabel.outputs.latest_date }}.pmtiles"; do
+            size=$(stat -c%s "$f")
+            echo "$f => $size bytes"
+            [ "$size" -le "$max" ] || { echo "ERROR: $f exceeds 95MB safety limit"; exit 1; }
+          done
 
-          # Delete existing release/tag with same name if it exists (idempotent)
-          gh release delete "$TAG" --yes 2>/dev/null || true
-          git push --delete origin "$TAG" 2>/dev/null || true
-
-          # Create new release and upload the gz file
-          gh release create "$TAG" \
-            --title "WRF forecast ${RUN_ID}" \
-            --notes "Automated WRF CPTEC rainfall forecast for run ${RUN_ID}. Full 72h nested GeoJSON (gzip compressed)." \
-            --latest=false \
-            "$GZ_FILE"
-
-          echo "Release created: $TAG"
-          echo "RUN_ID=${RUN_ID}" >> $GITHUB_ENV
-
-      - name: Upload forecast artifacts
+      - name: Upload action artifacts
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: wrf-forecast-${{ github.run_number }}
           path: |
-            outputs/*.geojson
-            outputs/*.geojson.gz
+            outputs/*.json
+            outputs/*.pmtiles
             outputs/*.png
             outputs/run_log.txt
           retention-days: 30
 
-      - name: Commit forecast outputs (small files only)
+      - name: Publish latest.* to chuva-sc-76
+        env:
+          GH_TOKEN: ${{ secrets.CROSS_REPO_TOKEN }}
         run: |
-          git config user.name  "github-actions[bot]"
+          set -euo pipefail
+          git clone https://x-access-token:${GH_TOKEN}@github.com/jessicajcss/chuva-sc-76.git /tmp/chuva-sc-76
+          mkdir -p /tmp/chuva-sc-76/data /tmp/chuva-sc-76/tiles
+          cp outputs/latest.json /tmp/chuva-sc-76/data/latest.json
+          cp outputs/latest.pmtiles /tmp/chuva-sc-76/tiles/latest.pmtiles
+
+          cd /tmp/chuva-sc-76
+          git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          # Stage only small files — NOT the large .geojson (goes to Release instead)
-          git add outputs/latest.json outputs/*.png outputs/run_log.txt 2>/dev/null || true
-
+          git add data/latest.json tiles/latest.pmtiles
           if git diff --staged --quiet; then
-            echo "No changes to commit (forecast unchanged from previous run)."
+            echo "No changes to latest files."
           else
-            RUN_LABEL=$(date -u +'%Y-%m-%d %H:%M UTC')
-            git commit -m "forecast: WRF rainfall update ${RUN_LABEL} [skip ci]"
+            git commit -m "data: update latest WRF artifacts (${{ steps.dlabel.outputs.latest_date }}) [skip ci]"
             git push
           fi
+
+      - name: Create/update dated release in WRF repo
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="wrf-${{ steps.dlabel.outputs.latest_date }}"
+          TITLE="WRF forecast ${{ steps.dlabel.outputs.latest_date }}"
+
+          gh release view "$TAG" >/dev/null 2>&1 || \
+            gh release create "$TAG" --title "$TITLE" --notes "Automated WRF artifacts for ${{ steps.dlabel.outputs.latest_date }}"
+
+          gh release upload "$TAG" \
+            "outputs/${{ steps.dlabel.outputs.latest_date }}.json" \
+            "outputs/${{ steps.dlabel.outputs.latest_date }}.pmtiles" \
+            --clobber
+
+      - name: Keep only 7 most recent wrf-* releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mapfile -t tags < <(gh release list --limit 100 --json tagName,createdAt --jq '.[] | select(.tagName|startswith("wrf-")) | [.createdAt,.tagName] | @tsv' | sort -r | awk '{print $2}')
+          if [ "${#tags[@]}" -le 7 ]; then
+            echo "No pruning needed."
+            exit 0
+          fi
+          for ((i=7; i<${#tags[@]}; i++)); do
+            gh release delete "${tags[$i]}" --yes --cleanup-tag
+          done
