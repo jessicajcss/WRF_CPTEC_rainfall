@@ -1,6 +1,6 @@
 {
   "run_id": "2026030500",
-  "generated_at": "2026-03-05T03:04:17Z",
-  "geojson_url": "https://raw.githubusercontent.com/jessicajcss/WRF_CPTEC_rainfall/main/outputs/wrf_cep_forecast_2026030500_nested.geojson",
+  "generated_at": "2026-03-05T15:29:31Z",
+  "geojson_72h_url": "https://github.com/jessicajcss/WRF_CPTEC_rainfall/releases/download/wrf-2026030500/wrf_cep_forecast_2026030500_nested.geojson.gz",
   "ceps_xlsx_url": "https://raw.githubusercontent.com/jessicajcss/WRF_CPTEC_rainfall/main/data/ceps.xlsx"
 }
