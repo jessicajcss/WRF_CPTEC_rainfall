@@ -14,10 +14,6 @@ on:
         required: false
         default: '72'
 
-concurrency:
-  group: wrf-forecast
-  cancel-in-progress: true
-
 jobs:
   forecast:
     runs-on: ubuntu-22.04
@@ -104,36 +100,28 @@ jobs:
       - name: Validate expected outputs (Lovable + nested geojson)
         run: |
           set -euo pipefail
-
           NESTED=$(ls outputs/wrf_cep_forecast_*_nested.geojson 2>/dev/null | head -1)
-          test -n "$NESTED" || { echo "ERROR: No nested geojson outputs/wrf_cep_forecast_*_nested.geojson found"; exit 1; }
+          test -n "$NESTED" || { echo "ERROR: No nested geojson found"; exit 1; }
 
           test -f outputs/latest.json || { echo "ERROR: outputs/latest.json missing"; exit 1; }
           test -f outputs/available_runs.json || { echo "ERROR: outputs/available_runs.json missing"; exit 1; }
 
-          test -f outputs/points_lite_now_latest.geojson || { echo "ERROR: outputs/points_lite_now_latest.geojson missing"; exit 1; }
-          test -f outputs/points_lite_peak_12_latest.geojson || { echo "ERROR: outputs/points_lite_peak_12_latest.geojson missing"; exit 1; }
-          test -f outputs/points_lite_peak_24_latest.geojson || { echo "ERROR: outputs/points_lite_peak_24_latest.geojson missing"; exit 1; }
-          test -f outputs/points_lite_peak_48_latest.geojson || { echo "ERROR: outputs/points_lite_peak_48_latest.geojson missing"; exit 1; }
-          test -f outputs/points_lite_peak_72_latest.geojson || { echo "ERROR: outputs/points_lite_peak_72_latest.geojson missing"; exit 1; }
+          test -f outputs/points_lite_now_latest.geojson || { echo "ERROR: points_lite_now_latest missing"; exit 1; }
+          test -f outputs/points_lite_peak_12_latest.geojson || { echo "ERROR: points_lite_peak_12_latest missing"; exit 1; }
+          test -f outputs/points_lite_peak_24_latest.geojson || { echo "ERROR: points_lite_peak_24_latest missing"; exit 1; }
+          test -f outputs/points_lite_peak_48_latest.geojson || { echo "ERROR: points_lite_peak_48_latest missing"; exit 1; }
+          test -f outputs/points_lite_peak_72_latest.geojson || { echo "ERROR: points_lite_peak_72_latest missing"; exit 1; }
 
       - name: Enforce file size safety limit (<95MB each)
         run: |
           set -euo pipefail
           max=$((95 * 1024 * 1024))
-
           check() {
             f="$1"
-            if [ ! -f "$f" ]; then
-              echo "ERROR: missing file for size check: $f"
-              exit 1
-            fi
+            [ -f "$f" ] || { echo "ERROR: missing $f"; exit 1; }
             size=$(stat -c%s "$f")
             echo "$f => $size bytes"
-            if [ "$size" -gt "$max" ]; then
-              echo "ERROR: $f exceeds 95MB safety limit"
-              exit 1
-            fi
+            [ "$size" -le "$max" ] || { echo "ERROR: $f exceeds 95MB"; exit 1; }
           }
 
           check outputs/latest.json
@@ -153,16 +141,7 @@ jobs:
         run: |
           set -euo pipefail
           GEOJSON=$(ls outputs/wrf_cep_forecast_*_nested.geojson 2>/dev/null | head -1)
-          if [ -z "$GEOJSON" ]; then
-            echo "No GeoJSON found, skipping release upload."
-            exit 0
-          fi
-
           RUN_ID=$(basename "$GEOJSON" | grep -oP '\d{10}')
-          if [ -z "$RUN_ID" ]; then
-            echo "ERROR: Could not extract RUN_ID from filename: $GEOJSON"
-            exit 1
-          fi
 
           GZ_FILE="${GEOJSON}.gz"
           TAG="wrf-${RUN_ID}"
@@ -178,8 +157,6 @@ jobs:
             --latest=false \
             "$GZ_FILE"
 
-          echo "Release created: $TAG"
-
       - name: Keep only 7 most recent wrf-* releases (delete release + tag)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -189,30 +166,10 @@ jobs:
             --jq '.[] | select(.tagName|startswith("wrf-")) | [.createdAt,.tagName] | @tsv' \
             | sort -r | awk '{print $2}')
 
-          echo "Found ${#tags[@]} wrf-* releases"
-          if [ "${#tags[@]}" -le 7 ]; then
-            echo "No pruning needed."
-            exit 0
-          fi
-
+          if [ "${#tags[@]}" -le 7 ]; then exit 0; fi
           for ((i=7; i<${#tags[@]}; i++)); do
-            old="${tags[$i]}"
-            echo "Deleting old release+tag: $old"
-            gh release delete "$old" --yes --cleanup-tag
+            gh release delete "${tags[$i]}" --yes --cleanup-tag
           done
-
-      - name: Upload workflow artifacts (debug, 30 days)
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: wrf-forecast-${{ github.run_number }}
-          path: |
-            outputs/*.geojson
-            outputs/*.geojson.gz
-            outputs/*.json
-            outputs/*.png
-            outputs/run_log.txt
-          retention-days: 30
 
       - name: Commit Lovable outputs (small files only)
         run: |
@@ -228,7 +185,7 @@ jobs:
             outputs/run_log.txt 2>/dev/null || true
 
           if git diff --staged --quiet; then
-            echo "No changes to commit (artifacts unchanged)."
+            echo "No changes to commit."
           else
             RUN_LABEL=$(date -u +'%Y-%m-%d %H:%M UTC')
             git commit -m "forecast: update Lovable artifacts ${RUN_LABEL} [skip ci]"
