@@ -95,19 +95,22 @@ jobs:
           mkdir -p outputs data/WRF_downloads
           Rscript scripts/00-geojson_output.R 2>&1 | tee outputs/run_log.txt
 
+      - name: Debug outputs folder
+        if: always()
+        run: |
+          echo "=== outputs tree ==="
+          find outputs -maxdepth 2 -type f | sort || true
+
       - name: Validate expected outputs (Lovable + nested geojson)
         run: |
           set -euo pipefail
 
-          # must exist for releases and/or Lovable fallback
           NESTED=$(ls outputs/wrf_cep_forecast_*_nested.geojson 2>/dev/null | head -1)
           test -n "$NESTED" || { echo "ERROR: No nested geojson outputs/wrf_cep_forecast_*_nested.geojson found"; exit 1; }
 
-          # must exist for Lovable fast-path
           test -f outputs/latest.json || { echo "ERROR: outputs/latest.json missing"; exit 1; }
           test -f outputs/available_runs.json || { echo "ERROR: outputs/available_runs.json missing"; exit 1; }
 
-          # fast artifacts
           test -f outputs/points_lite_now_latest.geojson || { echo "ERROR: outputs/points_lite_now_latest.geojson missing"; exit 1; }
           test -f outputs/points_lite_peak_12_latest.geojson || { echo "ERROR: outputs/points_lite_peak_12_latest.geojson missing"; exit 1; }
           test -f outputs/points_lite_peak_24_latest.geojson || { echo "ERROR: outputs/points_lite_peak_24_latest.geojson missing"; exit 1; }
@@ -141,7 +144,6 @@ jobs:
           check outputs/points_lite_peak_48_latest.geojson
           check outputs/points_lite_peak_72_latest.geojson
 
-          # also check nested geojson (committed? no, but still useful to prevent accidental huge files)
           NESTED=$(ls outputs/wrf_cep_forecast_*_nested.geojson 2>/dev/null | head -1)
           check "$NESTED"
 
@@ -167,7 +169,6 @@ jobs:
 
           gzip -k "$GEOJSON"
 
-          # recreate the release to ensure correct asset every run
           gh release delete "$TAG" --yes 2>/dev/null || true
           git push --delete origin "$TAG" 2>/dev/null || true
 
@@ -178,7 +179,6 @@ jobs:
             "$GZ_FILE"
 
           echo "Release created: $TAG"
-          echo "RUN_ID=${RUN_ID}" >> $GITHUB_ENV
 
       - name: Keep only 7 most recent wrf-* releases (delete release + tag)
         env:
@@ -220,7 +220,6 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # commit ONLY small artifacts needed by Lovable; do NOT commit the big nested geojson
           git add \
             outputs/latest.json \
             outputs/available_runs.json \
