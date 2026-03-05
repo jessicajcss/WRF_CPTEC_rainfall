@@ -1318,34 +1318,354 @@ if (GHA_MODE) {
 
 
 
-
-
 # =============================================================
-# STEP 7 — Write outputs/latest.json (Lovable pointer file)
-# =============================================================
+# STEP 7 — Lovable artifacts (latest.json + available_runs.json +
+#         points_lite_now_* + points_lite_peak_{12,24,48,72}_*)
 #
-# Always written in GHA mode so Lovable can always fetch:
-#   https://raw.githubusercontent.com/.../main/outputs/latest.json
-# and discover today's GeoJSON URL without hardcoding filenames.
+# These files are fetched by Lovable from:
+#   https://raw.githubusercontent.com/jessicajcss/WRF_CPTEC_rainfall/main/outputs/...
+#
+# Required by Lovable src (fast path):
+#   outputs/points_lite_now_latest.geojson
+#   outputs/points_lite_peak_12_latest.geojson
+#   outputs/points_lite_peak_24_latest.geojson
+#   outputs/points_lite_peak_48_latest.geojson
+#   outputs/points_lite_peak_72_latest.geojson
+#   outputs/available_runs.json
+#   outputs/latest.json  (must have geojson_url + points_now_url)
+# =============================================================
 
-if (GHA_MODE) {
-  run_id        <- format(run_dt, "%Y%m%d%H")
-  generated_at  <- format(lubridate::now(tzone = "UTC"), "%Y-%m-%dT%H:%M:%SZ")
+`%||%` <- function(a, b) if (!is.null(a)) a else b
 
-  latest <- list(
-    run_id        = run_id,
-    generated_at  = generated_at,
-    geojson_72h_url = sprintf(
-      "https://github.com/jessicajcss/WRF_CPTEC_rainfall/releases/download/wrf-%s/wrf_cep_forecast_%s_nested.geojson.gz",
-      run_id, run_id
-    ),
-    ceps_xlsx_url = "https://raw.githubusercontent.com/jessicajcss/WRF_CPTEC_rainfall/main/data/ceps.xlsx"
+compute_heat_weight <- function(rain_mm) {
+  # Must match Lovable: Math.min(Math.sqrt(rainMm)/Math.sqrt(50), 1)
+  pmin(sqrt(pmax(rain_mm, 0)) / sqrt(50), 1)
+}
+
+# Convert run_id YYYYMMDDHH -> POSIXct UTC safely
+runid_to_utc <- function(run_id) {
+  year  <- as.integer(substr(run_id, 1, 4))
+  month <- as.integer(substr(run_id, 5, 6))
+  day   <- as.integer(substr(run_id, 7, 8))
+  hour  <- as.integer(substr(run_id, 9, 10))
+  as.POSIXct(sprintf("%04d-%02d-%02d %02d:00:00", year, month, day, hour), tz = "UTC")
+}
+
+# Build points-lite FeatureCollection from the nested GeoJSON.
+# "now" uses the closest timestamp to now (UTC) within the array.
+# "peak_<windowHours>" uses maximum rainfall within the next windowHours hours.
+build_points_lite_from_nested <- function(nested_geojson_path, mode = c("now", "peak"), windowHours = 24L) {
+  mode <- match.arg(mode)
+
+  if (!requireNamespace("jsonlite", quietly = TRUE))
+    stop("Package 'jsonlite' required. Ensure it is in .github/r-packages.txt (it is).")
+
+  obj <- jsonlite::fromJSON(nested_geojson_path, simplifyVector = FALSE)
+  feats <- obj$features %||% list()
+  nowUtc <- as.POSIXct(Sys.time(), tz = "UTC")
+  windowEnd <- nowUtc + as.numeric(windowHours) * 3600
+
+  out_feats <- lapply(feats, function(f) {
+    props <- f$properties %||% list()
+
+    # nested arrays (written by your export_spatial):
+    # valid_utc: ["2026-...Z", ...]
+    # rain_mm  : [0.0, ...]
+    valid <- props$valid_utc
+    rain  <- props$rain_mm
+
+    rainNow <- 0
+    nowTsBrt <- ""
+    peakMm <- 0
+    peakTsBrt <- ""
+
+    if (!is.null(valid) && !is.null(rain) && length(valid) > 0 && length(rain) > 0) {
+      # coerce
+      ts <- as.POSIXct(unlist(valid), tz = "UTC")
+      rr <- suppressWarnings(as.numeric(unlist(rain)))
+
+      ok <- is.finite(as.numeric(ts)) & is.finite(rr)
+      ts <- ts[ok]
+      rr <- rr[ok]
+
+      if (length(ts) > 0) {
+        # NOW = closest timestamp to now
+        diffs <- abs(as.numeric(difftime(ts, nowUtc, units = "secs")))
+        i_now <- which.min(diffs)
+        rainNow <- rr[i_now]
+        nowTsBrt <- format(ts[i_now], tz = "America/Sao_Paulo", "%d/%m %H:%M") |> paste0(" BRT")
+
+        # PEAK in next windowHours
+        in_win <- ts <= windowEnd
+        if (any(in_win)) {
+          rr_win <- rr[in_win]
+          ts_win <- ts[in_win]
+          i_peak <- which.max(rr_win)
+          peakMm <- rr_win[i_peak]
+          peakTsBrt <- format(ts_win[i_peak], tz = "America/Sao_Paulo", "%d/%m %H:%M") |> paste0(" BRT")
+        } else {
+          peakMm <- 0
+          peakTsBrt <- ""
+        }
+      }
+    } else {
+      # no arrays -> fallback to scalar summaries if present
+      rainNow <- props$rain_mm %||% 0
+      peakMm  <- props$max_rain_mm %||% rainNow
+    }
+
+    # Decide what this artifact stores
+    if (mode == "now") {
+      valMain <- rainNow
+      tsMain  <- nowTsBrt
+    } else {
+      valMain <- peakMm
+      tsMain  <- peakTsBrt
+    }
+
+    list(
+      type = "Feature",
+      geometry = f$geometry,
+      properties = list(
+        cep = props$cep %||% props$CEP %||% "",
+        municipio = props$municipio %||% props$municipality %||% props$city %||% "",
+        rain_now_mm = round(rainNow, 1),
+        now_ts_brt = nowTsBrt,
+        peak_window_mm = round(peakMm, 1),
+        peak_window_ts_brt = peakTsBrt,
+
+        # weights used by heatmap rendering in Lovable:
+        heat_now_weight = compute_heat_weight(rainNow),
+        heat_peak_weight = compute_heat_weight(peakMm),
+
+        # extra meta for debugging / UI if you ever want it
+        value_mm = round(valMain, 1),
+        value_ts_brt = tsMain
+      )
+    )
+  })
+
+  list(
+    type = "FeatureCollection",
+    features = out_feats
+  )
+}
+
+write_points_lite_files <- function(nested_geojson_path, run_dt, out_dir = "outputs", windows = c(12L, 24L, 48L, 72L)) {
+  run_id <- format(run_dt, "%Y%m%d%H")
+
+  # NOW
+  now_obj <- build_points_lite_from_nested(nested_geojson_path, mode = "now", windowHours = 24L)
+  now_obj$`_meta` <- list(run_id = run_id, kind = "now", generated_utc = format(lubridate::now(tzone = "UTC"), "%Y-%m-%dT%H:%M:%SZ"))
+
+  now_run_path <- file.path(out_dir, sprintf("points_lite_now_%s.geojson", run_id))
+  now_latest_path <- file.path(out_dir, "points_lite_now_latest.geojson")
+
+  jsonlite::write_json(now_obj, now_run_path, auto_unbox = TRUE, pretty = FALSE)
+  file.copy(now_run_path, now_latest_path, overwrite = TRUE)
+
+  # PEAK windows
+  for (w in windows) {
+    peak_obj <- build_points_lite_from_nested(nested_geojson_path, mode = "peak", windowHours = as.integer(w))
+    peak_obj$`_meta` <- list(run_id = run_id, kind = sprintf("peak_%d", as.integer(w)), generated_utc = format(lubridate::now(tzone = "UTC"), "%Y-%m-%dT%H:%M:%SZ"))
+
+    peak_run_path <- file.path(out_dir, sprintf("points_lite_peak_%d_%s.geojson", as.integer(w), run_id))
+    peak_latest_path <- file.path(out_dir, sprintf("points_lite_peak_%d_latest.geojson", as.integer(w)))
+
+    jsonlite::write_json(peak_obj, peak_run_path, auto_unbox = TRUE, pretty = FALSE)
+    file.copy(peak_run_path, peak_latest_path, overwrite = TRUE)
+  }
+
+  invisible(TRUE)
+}
+
+write_available_runs <- function(run_dt, out_path = "outputs/available_runs.json") {
+  run_id <- format(run_dt, "%Y%m%d%H")
+  utc_iso <- format(as.POSIXct(run_dt, tz = "UTC"), "%Y-%m-%dT%H:%M:%SZ")
+  label_brt <- format(as.POSIXct(run_dt, tz = "UTC"), tz = "America/Sao_Paulo", "%d/%m/%Y %H:%M")
+
+  available <- list(
+    runs = list(list(
+      run_id = run_id,
+      run_time_utc = utc_iso,
+      label_brt = paste0(label_brt, " BRT")
+    )),
+    default_run_id = run_id
   )
 
-  jsonlite::write_json(latest, "outputs/latest.json",
-                       auto_unbox = TRUE, pretty = TRUE)
-  message("latest.json written -> outputs/latest.json")
+  jsonlite::write_json(available, out_path, auto_unbox = TRUE, pretty = TRUE)
+  invisible(TRUE)
 }
+
+write_latest_json <- function(run_dt, out_path = "outputs/latest.json") {
+  run_id       <- format(run_dt, "%Y%m%d%H")
+  generated_at <- format(lubridate::now(tzone = "UTC"), "%Y-%m-%dT%H:%M:%SZ")
+
+  latest <- list(
+    run_id = run_id,
+    cycle  = run_id,
+    generated_at = generated_at,
+
+    # Lovable expects this key (path relative to repo root is fine)
+    geojson_url = sprintf("outputs/wrf_cep_forecast_%s_nested.geojson", run_id),
+
+    # Lovable expects this too (used in "Try precomputed URL from latest.json")
+    points_now_url = sprintf("outputs/points_lite_now_%s.geojson", run_id)
+  )
+
+  jsonlite::write_json(latest, out_path, auto_unbox = TRUE, pretty = TRUE)
+  invisible(TRUE)
+}
+
+# ---- Execute only in GitHub Actions mode ----
+if (GHA_MODE) {
+  dir.create("outputs", showWarnings = FALSE, recursive = TRUE)
+
+  run_id <- format(run_dt, "%Y%m%d%H")
+  nested_path <- file.path("outputs", sprintf("wrf_cep_forecast_%s_nested.geojson", run_id))
+
+  if (!file.exists(nested_path)) {
+    stop("Nested GeoJSON not found (expected): ", nested_path)
+  }
+
+  # 1) points_lite_* for now + peak windows (12/24/48/72)
+  write_points_lite_files(
+    nested_geojson_path = nested_path,
+    run_dt = run_dt,
+    out_dir = "outputs",
+    windows = c(12L, 24L, 48L, 72L)
+  )
+
+  # 2) available_runs.json (simple: only the current run)
+  write_available_runs(run_dt, out_path = "outputs/available_runs.json")
+
+  # 3) latest.json pointer in Lovable schema
+  write_latest_json(run_dt, out_path = "outputs/latest.json")
+
+  message("Lovable artifacts written for run_id=", run_id)
+  message(" - outputs/latest.json")
+  message(" - outputs/available_runs.json")
+  message(" - outputs/points_lite_now_latest.geojson")
+  message(" - outputs/points_lite_peak_{12,24,48,72}_latest.geojson")
+}
+
+
+
+# =============================================================
+# STEP 7b — Write points_lite_now_* (Lovable fast path)
+# =============================================================
+
+compute_heat_weight <- function(rain_mm) {
+  # Must match Lovable logic: sqrt smoothing capped at 1 using 50mm reference
+  pmin(sqrt(pmax(rain_mm, 0)) / sqrt(50), 1)
+}
+
+write_points_lite_now <- function(nested_geojson_path, run_dt, out_dir = "outputs") {
+  if (!requireNamespace("jsonlite", quietly = TRUE))
+    stop("Package 'jsonlite' required.")
+
+  run_id <- format(run_dt, "%Y%m%d%H")
+
+  obj <- jsonlite::fromJSON(nested_geojson_path, simplifyVector = FALSE)
+  feats <- obj$features
+  if (is.null(feats)) feats <- list()
+
+  lite_feats <- lapply(feats, function(f) {
+    props <- f$properties %||% list()
+
+    # Your nested file uses arrays named: hours, valid_utc, rain_mm, etc.
+    rain_series <- props$rain_mm
+    rain_now <- 0
+
+    if (is.null(rain_series) || length(rain_series) == 0) {
+      rain_now <- 0
+    } else {
+      # "now" approximation: take the first non-NA value
+      # (client will compute true "closest to now" if it falls back to full)
+      rr <- suppressWarnings(as.numeric(unlist(rain_series)))
+      rr <- rr[is.finite(rr)]
+      rain_now <- if (length(rr)) rr[1] else 0
+    }
+
+    # peak in the array (useful for the heat properties Lovable expects)
+    peak <- 0
+    if (!is.null(rain_series) && length(rain_series)) {
+      rr <- suppressWarnings(as.numeric(unlist(rain_series)))
+      rr <- rr[is.finite(rr)]
+      peak <- if (length(rr)) max(rr) else 0
+    }
+
+    list(
+      type = "Feature",
+      geometry = f$geometry,
+      properties = list(
+        cep = props$cep %||% props$CEP %||% "",
+        municipio = props$municipio %||% props$municipality %||% props$city %||% "",
+        rain_now_mm = round(rain_now, 1),
+        peak_window_mm = round(peak, 1),
+        heat_now_weight = compute_heat_weight(rain_now),
+        heat_peak_weight = compute_heat_weight(peak)
+      )
+    )
+  })
+
+  out_obj <- list(
+    type = "FeatureCollection",
+    features = lite_feats,
+    _meta = list(
+      run_id = run_id,
+      generated_utc = format(lubridate::now(tzone = "UTC"), "%Y-%m-%dT%H:%M:%SZ"),
+      source = "nested_geojson"
+    )
+  )
+
+  run_path <- file.path(out_dir, sprintf("points_lite_now_%s.geojson", run_id))
+  latest_path <- file.path(out_dir, "points_lite_now_latest.geojson")
+
+  jsonlite::write_json(out_obj, run_path, auto_unbox = TRUE, pretty = FALSE)
+  file.copy(run_path, latest_path, overwrite = TRUE)
+
+  message("Wrote: ", run_path)
+  message("Wrote: ", latest_path)
+
+  invisible(list(run_path = run_path, latest_path = latest_path))
+}
+
+
+
+# After export_spatial(...):
+run_id <- format(run_dt, "%Y%m%d%H")
+nested_path <- file.path("outputs", sprintf("wrf_cep_forecast_%s_nested.geojson", run_id))
+
+if (GHA_MODE) {
+  write_points_lite_now(nested_path, run_dt, out_dir = "outputs")
+}
+
+
+
+
+# =============================================================
+# STEP 7c — available_runs.json (Lovable run selector)
+# =============================================================
+
+if (GHA_MODE) {
+  run_id <- format(run_dt, "%Y%m%d%H")
+  utc_iso <- format(as.POSIXct(run_dt, tz = "UTC"), "%Y-%m-%dT%H:%M:%SZ")
+  label_brt <- format(as.POSIXct(run_dt, tz = "UTC"), tz = "America/Sao_Paulo", "%d/%m/%Y %H:%M")
+  available <- list(
+    runs = list(list(
+      run_id = run_id,
+      run_time_utc = utc_iso,
+      label_brt = paste0(label_brt, " BRT")
+    )),
+    default_run_id = run_id
+  )
+
+  jsonlite::write_json(available, "outputs/available_runs.json", auto_unbox = TRUE, pretty = TRUE)
+  message("available_runs.json written -> outputs/available_runs.json")
+}
+
+
 
 
 
