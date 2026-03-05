@@ -1,0 +1,137 @@
+name: WRF Daily Rainfall Forecast
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+
+  workflow_dispatch:
+    inputs:
+      run_start:
+        description: 'WRF run start UTC — "YYYY-MM-DD HH:MM" or leave empty to auto-detect'
+        required: false
+        default: ''
+      forecast_end_hr:
+        description: 'Forecast end hour (default: 72)'
+        required: false
+        default: '72'
+
+concurrency:
+  group: wrf-forecast
+  cancel-in-progress: true
+
+jobs:
+  forecast:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+
+    permissions:
+      contents: write
+
+    env:
+      GITHUB_PAT:           ${{ secrets.GITHUB_TOKEN }}
+      GHA_MODE:             'true'
+      WRF_RUN_START:        ${{ github.event.inputs.run_start }}
+      WRF_FORECAST_END_HR:  ${{ github.event.inputs.forecast_end_hr || '72' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup R
+        id: setup-r
+        uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: 'release'
+          use-public-rspm: true
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libgdal-dev libgeos-dev libproj-dev \
+            libudunits2-dev libcurl4-openssl-dev \
+            libssl-dev libxml2-dev libfontconfig1-dev \
+            libharfbuzz-dev libfribidi-dev libfreetype6-dev \
+            libpng-dev libtiff5-dev libjpeg-dev
+
+      - name: Cache R packages
+        id: r-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.R_LIBS_USER }}
+          key: ${{ runner.os }}-r-${{ steps.setup-r.outputs.installed-r-version }}-${{ hashFiles('.github/r-packages.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-r-${{ steps.setup-r.outputs.installed-r-version }}-
+
+      - name: Install R packages
+        if: steps.r-cache.outputs.cache-hit != 'true'
+        run: |
+          Rscript -e "
+          pkgs <- readLines('.github/r-packages.txt')
+          pkgs <- trimws(pkgs)
+          pkgs <- pkgs[nzchar(pkgs) & !startsWith(pkgs, '#')]
+          repos <- 'https://packagemanager.posit.co/cran/__linux__/jammy/latest'
+          install.packages(pkgs, repos = repos, dependencies = TRUE)
+          cat('Installed:', length(pkgs), 'packages\n')
+          "
+
+      - name: Check required repo files
+        run: |
+          echo "--- Checking required files ---"
+          test -f "data/shp/SC_Municipios_2024/SC_Municipios_2024.shp" \
+            || { echo "ERROR: shapefile not found."; exit 1; }
+          test -f "outputs/cep_list.rds" \
+            || { echo "ERROR: outputs/cep_list.rds not found."; exit 1; }
+          echo "All required files present."
+
+      - name: Run WRF forecast
+        run: |
+          mkdir -p outputs data/WRF_downloads
+          Rscript scripts/00-geojson_output.R 2>&1 | tee outputs/run_log.txt
+
+      - name: Write outputs/latest.json
+        run: |
+          if [ -n "$WRF_RUN_START" ]; then
+            RUN_ID=$(echo "$WRF_RUN_START" | sed 's/[^0-9]//g' | cut -c1-10)
+          else
+            RUN_ID=$(date -u +'%Y%m%d')00
+          fi
+          GENERATED_AT=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          cat > outputs/latest.json <<EOF
+          {
+            "run_id": "${RUN_ID}",
+            "generated_at": "${GENERATED_AT}",
+            "geojson_url": "https://raw.githubusercontent.com/jessicajcss/WRF_CPTEC_rainfall/main/outputs/wrf_cep_forecast_${RUN_ID}_nested.geojson",
+            "ceps_xlsx_url": "https://raw.githubusercontent.com/jessicajcss/WRF_CPTEC_rainfall/main/data/ceps.xlsx"
+          }
+          EOF
+          echo "latest.json written:"
+          cat outputs/latest.json
+
+      - name: Upload forecast artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: wrf-forecast-${{ github.run_number }}
+          path: |
+            outputs/*.geojson
+            outputs/*.png
+            outputs/run_log.txt
+          retention-days: 30
+
+      - name: Commit forecast outputs
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add outputs/*.geojson outputs/*.png outputs/latest.json outputs/run_log.txt 2>/dev/null || true
+
+          if git diff --staged --quiet; then
+            echo "No changes to commit (forecast unchanged from previous run)."
+          else
+            RUN_LABEL=$(date -u +'%Y-%m-%d %H:%M UTC')
+            git commit -m "forecast: WRF rainfall update ${RUN_LABEL} [skip ci]"
+            git push
+          fi
