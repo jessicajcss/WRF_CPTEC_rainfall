@@ -1329,22 +1329,22 @@ if (GHA_MODE) {
 # and discover today's GeoJSON URL without hardcoding filenames.
 
 if (GHA_MODE) {
-  run_id       <- format(run_dt, "%Y%m%d%H")
-  generated_at <- format(lubridate::now(tzone = "UTC"), "%Y-%m-%dT%H:%M:%SZ")
+  run_id        <- format(run_dt, "%Y%m%d%H")
+  generated_at  <- format(lubridate::now(tzone = "UTC"), "%Y-%m-%dT%H:%M:%SZ")
 
   latest <- list(
-    run_id       = run_id,
-    generated_at = generated_at,
-    geojson_url  = sprintf(
-      "https://raw.githubusercontent.com/jessicajcss/WRF_CPTEC_rainfall/main/outputs/wrf_cep_forecast_%s_nested.geojson",
-      run_id
+    run_id        = run_id,
+    generated_at  = generated_at,
+    geojson_72h_url = sprintf(
+      "https://github.com/jessicajcss/WRF_CPTEC_rainfall/releases/download/wrf-%s/wrf_cep_forecast_%s_nested.geojson.gz",
+      run_id, run_id
     ),
     ceps_xlsx_url = "https://raw.githubusercontent.com/jessicajcss/WRF_CPTEC_rainfall/main/data/ceps.xlsx"
   )
 
   jsonlite::write_json(latest, "outputs/latest.json",
                        auto_unbox = TRUE, pretty = TRUE)
-  message("latest.json written: outputs/latest.json")
+  message("latest.json written -> outputs/latest.json")
 }
 
 

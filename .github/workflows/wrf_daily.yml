@@ -11,9 +11,9 @@ on:
         required: false
         default: ''
       forecast_end_hr:
-        description: 'Forecast end hour (default: 12)'
+        description: 'Forecast end hour (default: 72)'
         required: false
-        default: '12'
+        default: '72'
 
 concurrency:
   group: wrf-forecast
@@ -31,7 +31,7 @@ jobs:
       GITHUB_PAT:           ${{ secrets.GITHUB_TOKEN }}
       GHA_MODE:             'true'
       WRF_RUN_START:        ${{ github.event.inputs.run_start }}
-      WRF_FORECAST_END_HR:  ${{ github.event.inputs.forecast_end_hr || '12' }}
+      WRF_FORECAST_END_HR:  ${{ github.event.inputs.forecast_end_hr || '72' }}
 
     steps:
       - name: Checkout repository
@@ -86,10 +86,45 @@ jobs:
             || { echo "ERROR: outputs/cep_list.rds not found."; exit 1; }
           echo "All required files present."
 
-      - name: Run WRF forecast
+      - name: Run WRF forecast (72h)
         run: |
           mkdir -p outputs data/WRF_downloads
           Rscript scripts/00-geojson_output.R 2>&1 | tee outputs/run_log.txt
+
+      - name: Create GitHub Release and upload 72h GeoJSON gz
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          GEOJSON=$(ls outputs/wrf_cep_forecast_*_nested.geojson 2>/dev/null | head -1)
+          if [ -z "$GEOJSON" ]; then
+            echo "No GeoJSON found, skipping release upload."
+            exit 0
+          fi
+
+          RUN_ID=$(basename "$GEOJSON" | grep -oP '\d{10}')
+          if [ -z "$RUN_ID" ]; then
+            echo "ERROR: Could not extract RUN_ID from filename: $GEOJSON"
+            exit 1
+          fi
+          GZ_FILE="${GEOJSON}.gz"
+          TAG="wrf-${RUN_ID}"
+
+          # Gzip the geojson (keep original with -k for artifact upload)
+          gzip -k "$GEOJSON"
+
+          # Delete existing release/tag with same name if it exists (idempotent)
+          gh release delete "$TAG" --yes 2>/dev/null || true
+          git push --delete origin "$TAG" 2>/dev/null || true
+
+          # Create new release and upload the gz file
+          gh release create "$TAG" \
+            --title "WRF forecast ${RUN_ID}" \
+            --notes "Automated WRF CPTEC rainfall forecast for run ${RUN_ID}. Full 72h nested GeoJSON (gzip compressed)." \
+            --latest=false \
+            "$GZ_FILE"
+
+          echo "Release created: $TAG"
+          echo "RUN_ID=${RUN_ID}" >> $GITHUB_ENV
 
       - name: Upload forecast artifacts
         uses: actions/upload-artifact@v4
@@ -98,16 +133,18 @@ jobs:
           name: wrf-forecast-${{ github.run_number }}
           path: |
             outputs/*.geojson
+            outputs/*.geojson.gz
             outputs/*.png
             outputs/run_log.txt
           retention-days: 30
 
-      - name: Commit forecast outputs
+      - name: Commit forecast outputs (small files only)
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git add outputs/*.geojson outputs/*.png outputs/latest.json outputs/run_log.txt 2>/dev/null || true
+          # Stage only small files — NOT the large .geojson (goes to Release instead)
+          git add outputs/latest.json outputs/*.png outputs/run_log.txt 2>/dev/null || true
 
           if git diff --staged --quiet; then
             echo "No changes to commit (forecast unchanged from previous run)."
