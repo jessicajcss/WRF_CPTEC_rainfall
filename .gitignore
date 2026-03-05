@@ -2,3 +2,7 @@
 .Rhistory
 .RData
 .Ruserdata
+
+# Large forecast outputs — never commit these to the repo
+outputs/*.geojson
+outputs/*.geojson.gz

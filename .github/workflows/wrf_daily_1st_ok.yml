@@ -29,6 +29,7 @@ jobs:
 
     env:
       GITHUB_PAT:           ${{ secrets.GITHUB_TOKEN }}
+      GH_TOKEN:             ${{ secrets.GITHUB_TOKEN }}
       GHA_MODE:             'true'
       WRF_RUN_START:        ${{ github.event.inputs.run_start }}
       WRF_FORECAST_END_HR:  ${{ github.event.inputs.forecast_end_hr || '72' }}
@@ -91,20 +92,56 @@ jobs:
           mkdir -p outputs data/WRF_downloads
           Rscript scripts/00-geojson_output.R 2>&1 | tee outputs/run_log.txt
 
-      - name: Write outputs/latest.json
+      - name: Gzip the GeoJSON
         run: |
-          if [ -n "$WRF_RUN_START" ]; then
-            RUN_ID=$(echo "$WRF_RUN_START" | sed 's/[^0-9]//g' | cut -c1-10)
+          GEOJSON_FILE=$(ls outputs/wrf_cep_forecast_*_nested.geojson 2>/dev/null | head -1)
+          if [ -n "$GEOJSON_FILE" ]; then
+            gzip -9 -k "$GEOJSON_FILE"
+            echo "Gzipped: ${GEOJSON_FILE}.gz"
+            ls -lh "${GEOJSON_FILE}.gz"
           else
-            RUN_ID=$(date -u +'%Y%m%d')00
+            echo "No nested GeoJSON found to gzip."
+          fi
+
+      - name: Create GitHub Release and upload gz asset
+        run: |
+          if [ ! -f outputs/latest.json ]; then
+            echo "outputs/latest.json not found — skipping release upload."
+            exit 0
+          fi
+          RUN_ID=$(python3 -c "import json, sys; d=json.load(open('outputs/latest.json')); v=d.get('run_id',''); print(v) if v else sys.exit(1)")
+          echo "RUN_ID=${RUN_ID}" >> "$GITHUB_ENV"
+          TAG="wrf-${RUN_ID}"
+          GEOJSON_GZ=$(ls outputs/wrf_cep_forecast_*_nested.geojson.gz 2>/dev/null | head -1)
+
+          if [ -z "$GEOJSON_GZ" ]; then
+            echo "No .geojson.gz file found — skipping release upload."
+            exit 0
+          fi
+
+          # Delete old release with same tag if it exists (idempotent)
+          gh release delete "$TAG" --yes 2>/dev/null || true
+          gh release create "$TAG" \
+            --title "WRF Forecast ${RUN_ID}" \
+            --notes "Automated WRF 72h rainfall forecast. Run ID: ${RUN_ID}" \
+            --latest=false \
+            "$GEOJSON_GZ"
+
+      - name: Overwrite outputs/latest.json with release asset URL
+        run: |
+          GEOJSON_GZ=$(ls outputs/wrf_cep_forecast_*_nested.geojson.gz 2>/dev/null | head -1)
+          if [ -z "$GEOJSON_GZ" ]; then
+            echo "No .geojson.gz file found — skipping latest.json update."
+            exit 0
           fi
           GENERATED_AT=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          GZ_NAME=$(basename "$GEOJSON_GZ")
           cat > outputs/latest.json <<EOF
           {
             "run_id": "${RUN_ID}",
             "generated_at": "${GENERATED_AT}",
-            "geojson_url": "https://raw.githubusercontent.com/jessicajcss/WRF_CPTEC_rainfall/main/outputs/wrf_cep_forecast_${RUN_ID}_nested.geojson",
-            "ceps_xlsx_url": "https://raw.githubusercontent.com/jessicajcss/WRF_CPTEC_rainfall/main/data/ceps.xlsx"
+            "geojson_gz_url": "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/wrf-${RUN_ID}/${GZ_NAME}",
+            "ceps_xlsx_url": "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/data/ceps.xlsx"
           }
           EOF
           echo "latest.json written:"
@@ -116,20 +153,26 @@ jobs:
         with:
           name: wrf-forecast-${{ github.run_number }}
           path: |
-            outputs/*.geojson
             outputs/*.png
             outputs/run_log.txt
+            outputs/latest.json
           retention-days: 30
 
-      - name: Commit forecast outputs
+      - name: Commit small forecast outputs
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git add outputs/*.geojson outputs/*.png outputs/latest.json outputs/run_log.txt 2>/dev/null || true
+          # Add ONLY small files — never the large .geojson or .geojson.gz
+          git add outputs/latest.json 2>/dev/null || true
+          git add outputs/run_log.txt 2>/dev/null || true
+          git add outputs/forecast_map_*.png 2>/dev/null || true
+          # Explicitly ensure large GeoJSON files are NOT staged
+          git reset outputs/*.geojson 2>/dev/null || true
+          git reset outputs/*.geojson.gz 2>/dev/null || true
 
           if git diff --staged --quiet; then
-            echo "No changes to commit (forecast unchanged from previous run)."
+            echo "No small-file changes to commit."
           else
             RUN_LABEL=$(date -u +'%Y-%m-%d %H:%M UTC')
             git commit -m "forecast: WRF rainfall update ${RUN_LABEL} [skip ci]"
