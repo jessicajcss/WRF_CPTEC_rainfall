@@ -1,1 +1,6 @@
-{\n  "run_id": "2026030400",\n  "generated_at": "2026-03-04T06:00:00Z",\n  "geojson_url": "https://raw.githubusercontent.com/jessicajcss/WRF_CPTEC_rainfall/main/outputs/wrf_cep_forecast_2026030400_nested.geojson",\n  "ceps_xlsx_url": "https://raw.githubusercontent.com/jessicajcss/WRF_CPTEC_rainfall/main/data/ceps.xlsx",\n  "_note": "This file is automatically overwritten after each daily WRF forecast run. See .github/workflows/wrf_daily.yml"\n}
+{
+  "run_id": "2026030500",
+  "generated_at": "2026-03-05T03:04:17Z",
+  "geojson_url": "https://raw.githubusercontent.com/jessicajcss/WRF_CPTEC_rainfall/main/outputs/wrf_cep_forecast_2026030500_nested.geojson",
+  "ceps_xlsx_url": "https://raw.githubusercontent.com/jessicajcss/WRF_CPTEC_rainfall/main/data/ceps.xlsx"
+}

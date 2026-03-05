@@ -1,0 +1,109 @@
+Running in GHA mode.
+Auto-detected latest run: 2026-03-04 00:00 UTC
+================================================================
+Run init  : 2026-03-04 00:00 UTC (00Z)
+Fcst hrs  : 0 to 12
+Base URL  : https://dataserver.cptec.inpe.br/dataserver_modelos/wrf/ams_07km/brutos/2026/03/04/00/
+Local dir : data/WRF_downloads/20260304
+Exclude   : inv
+================================================================
+
+Fetching file list from server...
+Files in window: 41
+  ctl     : 14
+  grib2   : 13
+  grib2.idx: 14
+
+Already on disk: 41  |  To download: 0
+
+All requested files already exist on disk. Skipping download.
+          used  (Mb) gc trigger  (Mb) max used  (Mb)
+Ncells 2058195 110.0    3685238 196.9  3685238 196.9
+Vcells 2942892  22.5    8388608  64.0  4466509  34.1
+No .grib2 files to crop in: data/WRF_downloads/20260304 (already processed?)
+Discovering files...
+Discovered 13 .tif files.
+Loading municipality polygon...
+Extracting over Joinville (13 files)...
+  [1/13] h000  WRF_cpt_07KM_2026030400_2026030400.tif
+  [2/13] h001  WRF_cpt_07KM_2026030400_2026030401.tif
+  [3/13] h002  WRF_cpt_07KM_2026030400_2026030402.tif
+  [4/13] h003  WRF_cpt_07KM_2026030400_2026030403.tif
+  [5/13] h004  WRF_cpt_07KM_2026030400_2026030404.tif
+  [6/13] h005  WRF_cpt_07KM_2026030400_2026030405.tif
+  [7/13] h006  WRF_cpt_07KM_2026030400_2026030406.tif
+  [8/13] h007  WRF_cpt_07KM_2026030400_2026030407.tif
+  [9/13] h008  WRF_cpt_07KM_2026030400_2026030408.tif
+  [10/13] h009  WRF_cpt_07KM_2026030400_2026030409.tif
+  [11/13] h010  WRF_cpt_07KM_2026030400_2026030410.tif
+  [12/13] h011  WRF_cpt_07KM_2026030400_2026030411.tif
+  [13/13] h012  WRF_cpt_07KM_2026030400_2026030412.tif
+
+Hourly rainfall table (mm):
+# A tibble: 12 × 4
+   valid_utc           forecast_hour accum_mm rain_mm
+   <dttm>                      <dbl>    <dbl>   <dbl>
+ 1 2026-03-04 01:00:00             1  0       0      
+ 2 2026-03-04 02:00:00             2  0       0      
+ 3 2026-03-04 03:00:00             3  0       0      
+ 4 2026-03-04 04:00:00             4  0       0      
+ 5 2026-03-04 05:00:00             5  0       0      
+ 6 2026-03-04 06:00:00             6  0       0      
+ 7 2026-03-04 07:00:00             7  0.00533 0.00533
+ 8 2026-03-04 08:00:00             8  0.0213  0.0160 
+ 9 2026-03-04 09:00:00             9  0.0380  0.0167 
+10 2026-03-04 10:00:00            10  0.0627  0.0247 
+11 2026-03-04 11:00:00            11  0.0733  0.0107 
+12 2026-03-04 12:00:00            12  0.0733  0      
+
+Loading CEP list from:  outputs/cep_list.rds 
+  135186 geocoded CEP points loaded (295 municipalities)
+  Sample:
+  municipio      localidade   cep_fmt       lon       lat
+1   PALHOCA BARRA DO ARIRIU 88134-375 -48.64177 -27.68352
+2   PALHOCA JARDIM ELDORADO 88133-315 -48.66622 -27.62999
+3   PALHOCA          CENTRO 88131-160 -48.67061 -27.65430
+4   PALHOCA     PASSA VINTE 88132-100 -48.67109 -27.64090
+5   PALHOCA   PRAIA DO MEIO 88139-249 -48.59942 -27.85211
+
+Extracting rainfall for all CEPs x all forecast hours...
+  (135186 points x up to 12 hours = up to 1622232 extractions)
+Discovered 13 .tif files.
+  [1/13] h000  WRF_cpt_07KM_2026030400_2026030400.tif
+  [2/13] h001  WRF_cpt_07KM_2026030400_2026030401.tif
+  [3/13] h002  WRF_cpt_07KM_2026030400_2026030402.tif
+  [4/13] h003  WRF_cpt_07KM_2026030400_2026030403.tif
+  [5/13] h004  WRF_cpt_07KM_2026030400_2026030404.tif
+  [6/13] h005  WRF_cpt_07KM_2026030400_2026030405.tif
+  [7/13] h006  WRF_cpt_07KM_2026030400_2026030406.tif
+  [8/13] h007  WRF_cpt_07KM_2026030400_2026030407.tif
+  [9/13] h008  WRF_cpt_07KM_2026030400_2026030408.tif
+  [10/13] h009  WRF_cpt_07KM_2026030400_2026030409.tif
+  [11/13] h010  WRF_cpt_07KM_2026030400_2026030410.tif
+  [12/13] h011  WRF_cpt_07KM_2026030400_2026030411.tif
+  [13/13] h012  WRF_cpt_07KM_2026030400_2026030412.tif
+
+Extraction complete: 1717148 rows (40270 CEPs x 13 hours with data)
+           used  (Mb) gc trigger  (Mb) max used  (Mb)
+Ncells  2720442 145.3    5894501 314.9  5894501 314.9
+Vcells 25222932 192.5   68209457 520.4 67085260 511.9
+
+Exporting spatial files...
+
+Building nested GeoJSON (1 feature per CEP)...
+  Building 40270 features (vectorised)...
+  Serialising to JSON...
+  -> wrf_cep_forecast_2026030400_nested.geojson  |  40270 features  |  73.4 MB
+
+40270 CEPs  x  13 forecast hours  =  523510 data points
+
+Rain intensity summary:
+
+  light    none 
+  76195 1640953 
+
+Rain range (mm):  min=0.000  median=0.000  max=0.228  total=892.364 mm
+
+Files written:
+  outputs/wrf_cep_forecast_2026030400_nested.geojson       73.4 MB
+Map saved to: outputs/forecast_map_2026030400.png
