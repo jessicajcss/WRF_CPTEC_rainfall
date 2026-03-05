@@ -1,0 +1,26 @@
+# R packages required by wrf_rainfall_forecast.R
+# One package per line. Lines starting with # are ignored.
+# This file drives both the GHA cache key and the install step —
+# bump the version comment if you add/remove a package so the
+# cache is invalidated and packages are re-installed cleanly.
+#
+# Last updated: 2026-03
+terra
+sf
+dplyr
+ggplot2
+lubridate
+stringr
+rvest
+httr
+future
+furrr
+geocodebr
+progressr
+jsonlite
+readxl
+arrow
+tibble
+viridis
+cli
+ragg

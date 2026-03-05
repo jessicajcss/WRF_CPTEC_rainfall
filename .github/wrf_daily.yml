@@ -1,0 +1,166 @@
+name: WRF Daily Rainfall Forecast
+
+# ─────────────────────────────────────────────────────────────
+# Triggers
+# ─────────────────────────────────────────────────────────────
+on:
+  schedule:
+    # 08:00 UTC daily — CPTEC 00Z WRF run is typically available
+    # by 06-08 UTC.  Adjust if you want to use the 12Z run instead.
+    - cron: '0 8 * * *'
+
+  workflow_dispatch:
+    # Manual trigger: lets you re-run or override the date from
+    # the GitHub Actions UI without editing the code.
+    inputs:
+      run_start:
+        description: 'WRF run start UTC — "YYYY-MM-DD HH:MM" or leave empty to auto-detect'
+        required: false
+        default: ''
+      forecast_end_hr:
+        description: 'Forecast end hour (default: 72)'
+        required: false
+        default: '72'
+
+# Only one forecast job at a time — cancel any stale run if a
+# new one is triggered (e.g. manual re-run while scheduled runs).
+concurrency:
+  group: wrf-forecast
+  cancel-in-progress: true
+
+# ─────────────────────────────────────────────────────────────
+# Job
+# ─────────────────────────────────────────────────────────────
+jobs:
+  forecast:
+    runs-on: ubuntu-22.04          # pinned for GDAL/PROJ stability
+    timeout-minutes: 120           # hard cap; typical run ~25-40 min
+
+    permissions:
+      contents: write              # needed to git-push outputs back
+
+    env:
+      GITHUB_PAT:           ${{ secrets.GITHUB_TOKEN }}
+      # Passed through to R script
+      GHA_MODE:             'true'
+      WRF_RUN_START:        ${{ github.event.inputs.run_start }}
+      WRF_FORECAST_END_HR:  ${{ github.event.inputs.forecast_end_hr || '72' }}
+
+    steps:
+      # ── 1. Checkout ──────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── 2. R setup ───────────────────────────────────────────
+      - name: Setup R
+        uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: 'release'
+          # Posit Public Package Manager provides pre-compiled Linux
+          # binaries — avoids compiling terra/sf from source (~20 min saved)
+          use-public-rspm: true
+
+      # ── 3. System libs (GDAL, PROJ, GEOS needed by terra/sf) ─
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libgdal-dev libgeos-dev libproj-dev \
+            libudunits2-dev libcurl4-openssl-dev \
+            libssl-dev libxml2-dev libfontconfig1-dev \
+            libharfbuzz-dev libfribidi-dev libfreetype6-dev \
+            libpng-dev libtiff5-dev libjpeg-dev
+          # ^ last 4 lines: needed by ragg/systemfonts (ggplot2 device)
+
+      # ── 4. R package cache ───────────────────────────────────
+      # Cache key includes OS + R version + the package list file.
+      # If any package changes, the cache is invalidated and
+      # packages are re-installed from CRAN binaries.
+      - name: Cache R packages
+        id: r-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.R_LIBS_USER }}
+          key: ${{ runner.os }}-r-${{ steps.setup-r.outputs.installed-r-version }}-${{ hashFiles('.github/r-packages.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-r-${{ steps.setup-r.outputs.installed-r-version }}-
+
+      - name: Install R packages
+        # Only run when cache is cold (first run or package list changed)
+        if: steps.r-cache.outputs.cache-hit != 'true'
+        run: |
+          Rscript -e "
+          pkgs <- readLines('.github/r-packages.txt')
+          pkgs <- trimws(pkgs)
+          pkgs <- pkgs[nzchar(pkgs) & !startsWith(pkgs, '#')]
+          repos <- 'https://packagemanager.posit.co/cran/__linux__/jammy/latest'
+          install.packages(pkgs, repos = repos, dependencies = TRUE)
+          cat('Installed:', length(pkgs), 'packages\n')
+          "
+
+      # ── 5. Validate required data files ──────────────────────
+      - name: Check required repo files
+        run: |
+          echo "--- Checking required files ---"
+          # Shapefile must be committed to the repo
+          test -f "data/shp/SC_Municipios_2024/SC_Municipios_2024.shp" \
+            || { echo "ERROR: shapefile not found. Commit it to data/shp/"; exit 1; }
+          # CEP list must be committed (generated once by 00_build_cep_list.R)
+          test -f "outputs/cep_list.rds" \
+            || { echo "ERROR: outputs/cep_list.rds not found."; \
+                 echo "Run 00_build_cep_list.R locally and commit the result."; exit 1; }
+          echo "All required files present."
+
+      # ── 6. Run forecast ──────────────────────────────────────
+      - name: Run WRF forecast
+        run: |
+          mkdir -p outputs data/WRF_downloads
+          Rscript wrf_rainfall_forecast.R 2>&1 | tee outputs/run_log.txt
+
+      # ── 7. Upload GeoJSON as workflow artifact ────────────────
+      # Available for 30 days in the Actions UI → useful for debugging
+      # and as a direct download without needing a git commit.
+      - name: Upload forecast artifacts
+        uses: actions/upload-artifact@v4
+        if: always()   # upload even if the step above failed (for debugging)
+        with:
+          name: wrf-forecast-${{ github.run_number }}
+          path: |
+            outputs/*.geojson
+            outputs/*.png
+            outputs/run_log.txt
+          retention-days: 30
+
+      # ── 8. Commit outputs back to repo ───────────────────────
+      # The GeoJSON is committed so it's always accessible via the
+      # GitHub raw URL — Lovable and other web apps can fetch it directly:
+      # https://raw.githubusercontent.com/<owner>/<repo>/main/outputs/wrf_cep_forecast_YYYYMMDDHH_nested.geojson
+      - name: Commit forecast outputs
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Stage outputs but not WRF downloads (those are gitignored)
+          git add outputs/*.geojson outputs/*.png outputs/run_log.txt 2>/dev/null || true
+
+          if git diff --staged --quiet; then
+            echo "No changes to commit (forecast unchanged from previous run)."
+          else
+            RUN_LABEL=$(date -u +'%Y-%m-%d %H:%M UTC')
+            git commit -m "forecast: WRF rainfall update ${RUN_LABEL} [skip ci]"
+            git push
+          fi
+
+      # ── 9. Notify on failure ─────────────────────────────────
+      # Optional: uncomment and add SLACK_WEBHOOK_URL secret to get
+      # a Slack alert when the forecast fails.
+      #
+      # - name: Notify failure
+      #   if: failure()
+      #   uses: slackapi/slack-github-action@v1
+      #   with:
+      #     payload: '{"text":"WRF forecast failed: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}'
+      #   env:
+      #     SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

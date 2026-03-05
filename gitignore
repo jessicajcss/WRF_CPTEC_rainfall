@@ -1,0 +1,31 @@
+# ── WRF raw downloads (large, rebuilt daily — do NOT commit) ──
+data/WRF_downloads/
+data/WRF_downloads/**
+
+# ── Shapefiles (commit only if small; large files use Git LFS) ──
+# Uncomment if your shapefile is >50 MB:
+# data/shp/
+
+# ── Local R session artefacts ──
+.Rhistory
+.RData
+.Rproj.user/
+*.Rproj
+
+# ── Outputs to KEEP in repo (intentionally not ignored) ──
+# outputs/cep_list.rds       ← commit this (built once, ~1–5 MB)
+# outputs/*.geojson           ← committed by GHA after each forecast
+# outputs/*.png               ← map PNG committed by GHA
+
+# ── Large outputs you might NOT want in git ──
+# Uncomment if your fgb/shp outputs are >50 MB:
+# outputs/*.fgb
+# outputs/shp/
+
+# ── Python ──
+__pycache__/
+*.py[cod]
+
+# ── OS noise ──
+.DS_Store
+Thumbs.db
