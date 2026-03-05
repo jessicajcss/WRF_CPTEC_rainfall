@@ -11,9 +11,9 @@ on:
         required: false
         default: ''
       forecast_end_hr:
-        description: 'Forecast end hour (default: 72)'
+        description: 'Forecast end hour (default: 12)'
         required: false
-        default: '72'
+        default: '12'
 
 concurrency:
   group: wrf-forecast
@@ -31,7 +31,7 @@ jobs:
       GITHUB_PAT:           ${{ secrets.GITHUB_TOKEN }}
       GHA_MODE:             'true'
       WRF_RUN_START:        ${{ github.event.inputs.run_start }}
-      WRF_FORECAST_END_HR:  ${{ github.event.inputs.forecast_end_hr || '72' }}
+      WRF_FORECAST_END_HR:  ${{ github.event.inputs.forecast_end_hr || '12' }}
 
     steps:
       - name: Checkout repository
