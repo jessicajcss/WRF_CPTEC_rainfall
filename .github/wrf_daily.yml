@@ -7,7 +7,7 @@ on:
   schedule:
     # 08:00 UTC daily — CPTEC 00Z WRF run is typically available
     # by 06-08 UTC.  Adjust if you want to use the 12Z run instead.
-    - cron: '0 8 * * *'
+    #- cron: '0 8 * * *'
 
   workflow_dispatch:
     # Manual trigger: lets you re-run or override the date from
