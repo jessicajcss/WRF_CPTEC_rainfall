@@ -1,3 +1,5 @@
+Running in GHA mode.
+Auto-detected latest run: 2026-03-05 00:00 UTC
 ================================================================
 Run init  : 2026-03-05 00:00 UTC (00Z)
 Fcst hrs  : 0 to 72
@@ -12,5 +14,597 @@ Files in window: 221
   grib2   : 73
   grib2.idx: 74
 
-Already on disk: 4  |  To download: 217
+Already on disk: 10  |  To download: 211
 
+
+Attaching package: ‘progressr’
+
+The following object is masked from ‘package:httr’:
+
+    progress
+
+
+[  1/211] OK  h001 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030501.grib2.idx
+[  2/211] OK  h002 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030502.ctl
+[  3/211] OK  h002 |  189.90 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030502.grib2
+[  4/211] OK  h002 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030502.grib2.idx
+[  5/211] OK  h003 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030503.ctl
+[  6/211] OK  h003 |  191.82 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030503.grib2
+[  7/211] OK  h003 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030503.grib2.idx
+[  8/211] OK  h004 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030504.ctl
+[  9/211] OK  h004 |  193.46 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030504.grib2
+[ 10/211] OK  h004 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030504.grib2.idx
+[ 11/211] OK  h005 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030505.ctl
+[ 12/211] OK  h005 |  195.11 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030505.grib2
+[ 13/211] OK  h005 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030505.grib2.idx
+[ 14/211] OK  h006 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030506.ctl
+[ 15/211] OK  h006 |  195.80 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030506.grib2
+[ 16/211] OK  h006 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030506.grib2.idx
+[ 17/211] OK  h007 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030507.ctl
+[ 18/211] OK  h007 |  196.32 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030507.grib2
+[ 19/211] OK  h007 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030507.grib2.idx
+[ 20/211] OK  h008 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030508.ctl
+[ 21/211] OK  h008 |  197.06 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030508.grib2
+[ 22/211] OK  h008 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030508.grib2.idx
+[ 23/211] OK  h009 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030509.ctl
+[ 24/211] OK  h009 |  197.48 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030509.grib2
+[ 25/211] OK  h009 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030509.grib2.idx
+[ 26/211] OK  h010 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030510.ctl
+[ 27/211] OK  h010 |  198.67 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030510.grib2
+[ 28/211] OK  h010 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030510.grib2.idx
+[ 29/211] OK  h011 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030511.ctl
+[ 30/211] OK  h011 |  199.06 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030511.grib2
+[ 31/211] OK  h011 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030511.grib2.idx
+[ 32/211] OK  h012 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030512.ctl
+[ 33/211] OK  h012 |  199.50 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030512.grib2
+[ 34/211] OK  h012 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030512.grib2.idx
+[ 35/211] OK  h013 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030513.ctl
+[ 36/211] OK  h013 |  199.23 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030513.grib2
+[ 37/211] OK  h013 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030513.grib2.idx
+[ 38/211] OK  h014 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030514.ctl
+[ 39/211] OK  h014 |  200.80 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030514.grib2
+[ 40/211] OK  h014 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030514.grib2.idx
+[ 41/211] OK  h015 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030515.ctl
+[ 42/211] OK  h015 |  201.63 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030515.grib2
+[ 43/211] OK  h015 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030515.grib2.idx
+[ 44/211] OK  h016 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030516.ctl
+[ 45/211] OK  h016 |  202.27 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030516.grib2
+[ 46/211] OK  h016 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030516.grib2.idx
+[ 47/211] OK  h017 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030517.ctl
+[ 48/211] OK  h017 |  202.30 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030517.grib2
+[ 49/211] OK  h017 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030517.grib2.idx
+[ 50/211] OK  h018 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030518.ctl
+[ 51/211] OK  h018 |  203.12 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030518.grib2
+[ 52/211] OK  h018 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030518.grib2.idx
+[ 53/211] OK  h019 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030519.ctl
+[ 54/211] OK  h019 |  203.88 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030519.grib2
+[ 55/211] OK  h019 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030519.grib2.idx
+[ 56/211] OK  h020 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030520.ctl
+[ 57/211] OK  h020 |  202.82 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030520.grib2
+[ 58/211] OK  h020 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030520.grib2.idx
+[ 59/211] OK  h021 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030521.ctl
+[ 60/211] OK  h021 |  201.24 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030521.grib2
+[ 61/211] OK  h021 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030521.grib2.idx
+[ 62/211] OK  h022 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030522.ctl
+[ 63/211] OK  h022 |  198.37 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030522.grib2
+[ 64/211] OK  h022 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030522.grib2.idx
+[ 65/211] OK  h023 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030523.ctl
+[ 66/211] OK  h023 |  196.42 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030523.grib2
+[ 67/211] OK  h023 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030523.grib2.idx
+[ 68/211] OK  h024 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030600.ctl
+[ 69/211] OK  h024 |  195.34 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030600.grib2
+[ 70/211] OK  h024 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030600.grib2.idx
+[ 71/211] OK  h025 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030601.ctl
+[ 72/211] OK  h025 |  195.44 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030601.grib2
+[ 73/211] OK  h025 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030601.grib2.idx
+[ 74/211] OK  h026 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030602.ctl
+[ 75/211] OK  h026 |  194.33 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030602.grib2
+[ 76/211] OK  h026 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030602.grib2.idx
+[ 77/211] OK  h027 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030603.ctl
+[ 78/211] OK  h027 |  194.63 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030603.grib2
+[ 79/211] OK  h027 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030603.grib2.idx
+[ 80/211] OK  h028 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030604.ctl
+[ 81/211] OK  h028 |  195.56 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030604.grib2
+[ 82/211] OK  h028 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030604.grib2.idx
+[ 83/211] OK  h029 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030605.ctl
+[ 84/211] OK  h029 |  195.17 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030605.grib2
+[ 85/211] OK  h029 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030605.grib2.idx
+[ 86/211] OK  h030 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030606.ctl
+[ 87/211] OK  h030 |  195.19 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030606.grib2
+[ 88/211] OK  h030 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030606.grib2.idx
+[ 89/211] OK  h031 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030607.ctl
+[ 90/211] OK  h031 |  195.58 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030607.grib2
+[ 91/211] OK  h031 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030607.grib2.idx
+[ 92/211] OK  h032 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030608.ctl
+[ 93/211] OK  h032 |  196.78 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030608.grib2
+[ 94/211] OK  h032 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030608.grib2.idx
+[ 95/211] OK  h033 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030609.ctl
+[ 96/211] OK  h033 |  197.63 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030609.grib2
+[ 97/211] OK  h033 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030609.grib2.idx
+[ 98/211] OK  h034 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030610.ctl
+[ 99/211] OK  h034 |  198.44 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030610.grib2
+[100/211] OK  h034 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030610.grib2.idx
+[101/211] OK  h035 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030611.ctl
+[102/211] OK  h035 |  198.41 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030611.grib2
+[103/211] OK  h035 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030611.grib2.idx
+[104/211] OK  h036 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030612.ctl
+[105/211] OK  h036 |  198.52 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030612.grib2
+[106/211] OK  h036 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030612.grib2.idx
+[107/211] OK  h038 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030614.grib2.idx
+[108/211] OK  h039 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030615.ctl
+[109/211] OK  h039 |  200.93 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030615.grib2
+[110/211] OK  h039 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030615.grib2.idx
+[111/211] OK  h040 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030616.ctl
+[112/211] OK  h040 |  203.17 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030616.grib2
+[113/211] OK  h040 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030616.grib2.idx
+[114/211] OK  h041 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030617.ctl
+[115/211] OK  h041 |  204.27 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030617.grib2
+[116/211] OK  h041 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030617.grib2.idx
+[117/211] OK  h042 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030618.ctl
+[118/211] OK  h042 |  204.75 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030618.grib2
+[119/211] OK  h042 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030618.grib2.idx
+[120/211] OK  h043 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030619.ctl
+[121/211] OK  h043 |  204.99 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030619.grib2
+[122/211] OK  h043 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030619.grib2.idx
+[123/211] OK  h044 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030620.ctl
+[124/211] OK  h044 |  203.54 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030620.grib2
+[125/211] OK  h044 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030620.grib2.idx
+[126/211] OK  h045 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030621.ctl
+[127/211] OK  h045 |  204.52 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030621.grib2
+[128/211] OK  h045 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030621.grib2.idx
+[129/211] OK  h046 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030622.ctl
+[130/211] OK  h046 |  201.46 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030622.grib2
+[131/211] OK  h046 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030622.grib2.idx
+[132/211] OK  h047 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030623.ctl
+[133/211] OK  h047 |  200.36 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030623.grib2
+[134/211] OK  h047 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030623.grib2.idx
+[135/211] OK  h048 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030700.ctl
+[136/211] OK  h048 |  198.81 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030700.grib2
+[137/211] OK  h048 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030700.grib2.idx
+[138/211] OK  h049 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030701.ctl
+[139/211] OK  h049 |  199.07 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030701.grib2
+[140/211] OK  h049 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030701.grib2.idx
+[141/211] OK  h050 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030702.ctl
+[142/211] OK  h050 |  198.36 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030702.grib2
+[143/211] OK  h050 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030702.grib2.idx
+[144/211] OK  h051 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030703.ctl
+[145/211] OK  h051 |  197.86 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030703.grib2
+[146/211] OK  h051 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030703.grib2.idx
+[147/211] OK  h052 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030704.ctl
+[148/211] OK  h052 |  197.70 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030704.grib2
+[149/211] OK  h052 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030704.grib2.idx
+[150/211] OK  h053 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030705.ctl
+[151/211] OK  h053 |  197.97 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030705.grib2
+[152/211] OK  h053 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030705.grib2.idx
+[153/211] OK  h054 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030706.ctl
+[154/211] OK  h054 |  198.45 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030706.grib2
+[155/211] OK  h054 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030706.grib2.idx
+[156/211] OK  h055 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030707.ctl
+[157/211] OK  h055 |  200.60 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030707.grib2
+[158/211] OK  h055 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030707.grib2.idx
+[159/211] OK  h056 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030708.ctl
+[160/211] OK  h056 |  201.42 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030708.grib2
+[161/211] OK  h056 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030708.grib2.idx
+[162/211] OK  h057 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030709.ctl
+[163/211] OK  h057 |  201.43 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030709.grib2
+[164/211] OK  h057 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030709.grib2.idx
+[165/211] OK  h058 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030710.ctl
+[166/211] OK  h058 |  202.34 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030710.grib2
+[167/211] OK  h058 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030710.grib2.idx
+[168/211] OK  h059 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030711.ctl
+[169/211] OK  h059 |  202.70 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030711.grib2
+[170/211] OK  h059 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030711.grib2.idx
+[171/211] OK  h060 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030712.ctl
+[172/211] OK  h060 |  201.67 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030712.grib2
+[173/211] OK  h060 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030712.grib2.idx
+[174/211] OK  h061 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030713.ctl
+[175/211] OK  h061 |  203.77 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030713.grib2
+[176/211] OK  h061 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030713.grib2.idx
+[177/211] OK  h062 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030714.ctl
+[178/211] OK  h062 |  203.74 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030714.grib2
+[179/211] OK  h062 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030714.grib2.idx
+[180/211] OK  h063 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030715.ctl
+[181/211] OK  h063 |  204.44 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030715.grib2
+[182/211] OK  h063 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030715.grib2.idx
+[183/211] OK  h064 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030716.ctl
+[184/211] OK  h064 |  205.66 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030716.grib2
+[185/211] OK  h064 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030716.grib2.idx
+[186/211] OK  h065 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030717.ctl
+[187/211] OK  h065 |  207.63 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030717.grib2
+[188/211] OK  h065 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030717.grib2.idx
+[189/211] OK  h066 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030718.ctl
+[190/211] OK  h066 |  208.70 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030718.grib2
+[191/211] OK  h066 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030718.grib2.idx
+[192/211] OK  h067 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030719.ctl
+[193/211] OK  h067 |  209.19 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030719.grib2
+[194/211] OK  h067 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030719.grib2.idx
+[195/211] OK  h068 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030720.ctl
+[196/211] OK  h068 |  209.39 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030720.grib2
+[197/211] OK  h068 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030720.grib2.idx
+[198/211] OK  h069 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030721.ctl
+[199/211] OK  h069 |  207.87 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030721.grib2
+[200/211] OK  h069 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030721.grib2.idx
+[201/211] OK  h070 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030722.ctl
+[202/211] OK  h070 |  204.89 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030722.grib2
+[203/211] OK  h070 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030722.grib2.idx
+[204/211] OK  h071 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030723.ctl
+[205/211] OK  h071 |  202.03 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030723.grib2
+[206/211] OK  h071 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030723.grib2.idx
+[207/211] OK  h072 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030800.ctl
+[208/211] OK  h072 |  201.71 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030800.grib2
+[209/211] OK  h072 |    0.00 MB | tries=1 | WRF_cpt_07KM_2026030500_2026030800.grib2.idx
+[210/211] OK  h000 |    0.01 MB | tries=1 | WRF_cpt_07KM_2026030500.ctl
+[211/211] OK  h000 |    0.42 MB | tries=1 | WRF_cpt_07KM_2026030500.grib2.idx
+
+Downloaded 211 files (13813.78 MB) in 535.8 s | 0 failed
+Manifest: data/WRF_downloads/_manifests/manifest_WRF_2026030500_h0-72.csv
+          used  (Mb) gc trigger  (Mb) max used  (Mb)
+Ncells 2182428 116.6    3685207 196.9  3685207 196.9
+Vcells 3206521  24.5    8388608  64.0  4466508  34.1
+
+Cropping 73 GRIB2 files to shapefile bbox + 0.5 deg buffer...
+  Extent: 54.34W to 47.83E, 29.86S to 25.46N
+  crop [1/73] WRF_cpt_07KM_2026030500_2026030500.grib2
+  crop [2/73] WRF_cpt_07KM_2026030500_2026030501.grib2
+  crop [3/73] WRF_cpt_07KM_2026030500_2026030502.grib2
+  crop [4/73] WRF_cpt_07KM_2026030500_2026030503.grib2
+  crop [5/73] WRF_cpt_07KM_2026030500_2026030504.grib2
+  crop [6/73] WRF_cpt_07KM_2026030500_2026030505.grib2
+  crop [7/73] WRF_cpt_07KM_2026030500_2026030506.grib2
+  crop [8/73] WRF_cpt_07KM_2026030500_2026030507.grib2
+  crop [9/73] WRF_cpt_07KM_2026030500_2026030508.grib2
+  crop [10/73] WRF_cpt_07KM_2026030500_2026030509.grib2
+  crop [11/73] WRF_cpt_07KM_2026030500_2026030510.grib2
+  crop [12/73] WRF_cpt_07KM_2026030500_2026030511.grib2
+  crop [13/73] WRF_cpt_07KM_2026030500_2026030512.grib2
+  crop [14/73] WRF_cpt_07KM_2026030500_2026030513.grib2
+  crop [15/73] WRF_cpt_07KM_2026030500_2026030514.grib2
+  crop [16/73] WRF_cpt_07KM_2026030500_2026030515.grib2
+  crop [17/73] WRF_cpt_07KM_2026030500_2026030516.grib2
+  crop [18/73] WRF_cpt_07KM_2026030500_2026030517.grib2
+  crop [19/73] WRF_cpt_07KM_2026030500_2026030518.grib2
+  crop [20/73] WRF_cpt_07KM_2026030500_2026030519.grib2
+  crop [21/73] WRF_cpt_07KM_2026030500_2026030520.grib2
+  crop [22/73] WRF_cpt_07KM_2026030500_2026030521.grib2
+  crop [23/73] WRF_cpt_07KM_2026030500_2026030522.grib2
+  crop [24/73] WRF_cpt_07KM_2026030500_2026030523.grib2
+  crop [25/73] WRF_cpt_07KM_2026030500_2026030600.grib2
+  crop [26/73] WRF_cpt_07KM_2026030500_2026030601.grib2
+  crop [27/73] WRF_cpt_07KM_2026030500_2026030602.grib2
+  crop [28/73] WRF_cpt_07KM_2026030500_2026030603.grib2
+  crop [29/73] WRF_cpt_07KM_2026030500_2026030604.grib2
+  crop [30/73] WRF_cpt_07KM_2026030500_2026030605.grib2
+  crop [31/73] WRF_cpt_07KM_2026030500_2026030606.grib2
+  crop [32/73] WRF_cpt_07KM_2026030500_2026030607.grib2
+  crop [33/73] WRF_cpt_07KM_2026030500_2026030608.grib2
+  crop [34/73] WRF_cpt_07KM_2026030500_2026030609.grib2
+  crop [35/73] WRF_cpt_07KM_2026030500_2026030610.grib2
+  crop [36/73] WRF_cpt_07KM_2026030500_2026030611.grib2
+  crop [37/73] WRF_cpt_07KM_2026030500_2026030612.grib2
+  crop [38/73] WRF_cpt_07KM_2026030500_2026030613.grib2
+  crop [39/73] WRF_cpt_07KM_2026030500_2026030614.grib2
+  crop [40/73] WRF_cpt_07KM_2026030500_2026030615.grib2
+  crop [41/73] WRF_cpt_07KM_2026030500_2026030616.grib2
+  crop [42/73] WRF_cpt_07KM_2026030500_2026030617.grib2
+  crop [43/73] WRF_cpt_07KM_2026030500_2026030618.grib2
+  crop [44/73] WRF_cpt_07KM_2026030500_2026030619.grib2
+  crop [45/73] WRF_cpt_07KM_2026030500_2026030620.grib2
+  crop [46/73] WRF_cpt_07KM_2026030500_2026030621.grib2
+  crop [47/73] WRF_cpt_07KM_2026030500_2026030622.grib2
+  crop [48/73] WRF_cpt_07KM_2026030500_2026030623.grib2
+  crop [49/73] WRF_cpt_07KM_2026030500_2026030700.grib2
+  crop [50/73] WRF_cpt_07KM_2026030500_2026030701.grib2
+  crop [51/73] WRF_cpt_07KM_2026030500_2026030702.grib2
+  crop [52/73] WRF_cpt_07KM_2026030500_2026030703.grib2
+  crop [53/73] WRF_cpt_07KM_2026030500_2026030704.grib2
+  crop [54/73] WRF_cpt_07KM_2026030500_2026030705.grib2
+  crop [55/73] WRF_cpt_07KM_2026030500_2026030706.grib2
+  crop [56/73] WRF_cpt_07KM_2026030500_2026030707.grib2
+  crop [57/73] WRF_cpt_07KM_2026030500_2026030708.grib2
+  crop [58/73] WRF_cpt_07KM_2026030500_2026030709.grib2
+  crop [59/73] WRF_cpt_07KM_2026030500_2026030710.grib2
+  crop [60/73] WRF_cpt_07KM_2026030500_2026030711.grib2
+  crop [61/73] WRF_cpt_07KM_2026030500_2026030712.grib2
+  crop [62/73] WRF_cpt_07KM_2026030500_2026030713.grib2
+  crop [63/73] WRF_cpt_07KM_2026030500_2026030714.grib2
+  crop [64/73] WRF_cpt_07KM_2026030500_2026030715.grib2
+  crop [65/73] WRF_cpt_07KM_2026030500_2026030716.grib2
+  crop [66/73] WRF_cpt_07KM_2026030500_2026030717.grib2
+  crop [67/73] WRF_cpt_07KM_2026030500_2026030718.grib2
+  crop [68/73] WRF_cpt_07KM_2026030500_2026030719.grib2
+  crop [69/73] WRF_cpt_07KM_2026030500_2026030720.grib2
+  crop [70/73] WRF_cpt_07KM_2026030500_2026030721.grib2
+  crop [71/73] WRF_cpt_07KM_2026030500_2026030722.grib2
+  crop [72/73] WRF_cpt_07KM_2026030500_2026030723.grib2
+  crop [73/73] WRF_cpt_07KM_2026030500_2026030800.grib2
+
+Crop complete: 69 / 73 files converted to .tif
+Disk usage: 13857.7 MB (GRIB2)  ->  0.8 MB (.tif)  [100% saved]
+
+Warning messages:
+1: In new_CppObject_xp(fields$.module, fields$.pointer, ...) :
+  GDAL Error 4: /home/runner/work/WRF_CPTEC_rainfall/WRF_CPTEC_rainfall/data/WRF_downloads/20260305/h000/WRF_cpt_07KM_2026030500_2026030500.grib2 is a grib file, but no raster dataset was successfully identified.
+2: In value[[3L]](cond) :
+  Crop failed for WRF_cpt_07KM_2026030500_2026030500.grib2:
+  [rast] cannot open this file as a SpatRaster: /home/runner/work/WRF_CPTEC_rainfall/WRF_CPTEC_rainfall/data/WRF_downloads/20260305/h000/WRF_cpt_07KM_2026030500_2026030500.grib2
+  File kept as-is.
+3: In new_CppObject_xp(fields$.module, fields$.pointer, ...) :
+  GDAL Error 4: /home/runner/work/WRF_CPTEC_rainfall/WRF_CPTEC_rainfall/data/WRF_downloads/20260305/h001/WRF_cpt_07KM_2026030500_2026030501.grib2 is a grib file, but no raster dataset was successfully identified.
+4: In value[[3L]](cond) :
+  Crop failed for WRF_cpt_07KM_2026030500_2026030501.grib2:
+  [rast] cannot open this file as a SpatRaster: /home/runner/work/WRF_CPTEC_rainfall/WRF_CPTEC_rainfall/data/WRF_downloads/20260305/h001/WRF_cpt_07KM_2026030500_2026030501.grib2
+  File kept as-is.
+5: In new_CppObject_xp(fields$.module, fields$.pointer, ...) :
+  GDAL Error 4: /home/runner/work/WRF_CPTEC_rainfall/WRF_CPTEC_rainfall/data/WRF_downloads/20260305/h037/WRF_cpt_07KM_2026030500_2026030613.grib2 is a grib file, but no raster dataset was successfully identified.
+6: In value[[3L]](cond) :
+  Crop failed for WRF_cpt_07KM_2026030500_2026030613.grib2:
+  [rast] cannot open this file as a SpatRaster: /home/runner/work/WRF_CPTEC_rainfall/WRF_CPTEC_rainfall/data/WRF_downloads/20260305/h037/WRF_cpt_07KM_2026030500_2026030613.grib2
+  File kept as-is.
+7: In new_CppObject_xp(fields$.module, fields$.pointer, ...) :
+  GDAL Error 4: /home/runner/work/WRF_CPTEC_rainfall/WRF_CPTEC_rainfall/data/WRF_downloads/20260305/h038/WRF_cpt_07KM_2026030500_2026030614.grib2 is a grib file, but no raster dataset was successfully identified.
+8: In value[[3L]](cond) :
+  Crop failed for WRF_cpt_07KM_2026030500_2026030614.grib2:
+  [rast] cannot open this file as a SpatRaster: /home/runner/work/WRF_CPTEC_rainfall/WRF_CPTEC_rainfall/data/WRF_downloads/20260305/h038/WRF_cpt_07KM_2026030500_2026030614.grib2
+  File kept as-is.
+Discovering files...
+Discovered 69 .tif files.
+Loading municipality polygon...
+Extracting over Joinville (69 files)...
+  [1/69] h002  WRF_cpt_07KM_2026030500_2026030502.tif
+  [2/69] h003  WRF_cpt_07KM_2026030500_2026030503.tif
+  [3/69] h004  WRF_cpt_07KM_2026030500_2026030504.tif
+  [4/69] h005  WRF_cpt_07KM_2026030500_2026030505.tif
+  [5/69] h006  WRF_cpt_07KM_2026030500_2026030506.tif
+  [6/69] h007  WRF_cpt_07KM_2026030500_2026030507.tif
+  [7/69] h008  WRF_cpt_07KM_2026030500_2026030508.tif
+  [8/69] h009  WRF_cpt_07KM_2026030500_2026030509.tif
+  [9/69] h010  WRF_cpt_07KM_2026030500_2026030510.tif
+  [10/69] h011  WRF_cpt_07KM_2026030500_2026030511.tif
+  [11/69] h012  WRF_cpt_07KM_2026030500_2026030512.tif
+  [12/69] h013  WRF_cpt_07KM_2026030500_2026030513.tif
+  [13/69] h014  WRF_cpt_07KM_2026030500_2026030514.tif
+  [14/69] h015  WRF_cpt_07KM_2026030500_2026030515.tif
+  [15/69] h016  WRF_cpt_07KM_2026030500_2026030516.tif
+  [16/69] h017  WRF_cpt_07KM_2026030500_2026030517.tif
+  [17/69] h018  WRF_cpt_07KM_2026030500_2026030518.tif
+  [18/69] h019  WRF_cpt_07KM_2026030500_2026030519.tif
+  [19/69] h020  WRF_cpt_07KM_2026030500_2026030520.tif
+  [20/69] h021  WRF_cpt_07KM_2026030500_2026030521.tif
+  [21/69] h022  WRF_cpt_07KM_2026030500_2026030522.tif
+  [22/69] h023  WRF_cpt_07KM_2026030500_2026030523.tif
+  [23/69] h024  WRF_cpt_07KM_2026030500_2026030600.tif
+  [24/69] h025  WRF_cpt_07KM_2026030500_2026030601.tif
+  [25/69] h026  WRF_cpt_07KM_2026030500_2026030602.tif
+  [26/69] h027  WRF_cpt_07KM_2026030500_2026030603.tif
+  [27/69] h028  WRF_cpt_07KM_2026030500_2026030604.tif
+  [28/69] h029  WRF_cpt_07KM_2026030500_2026030605.tif
+  [29/69] h030  WRF_cpt_07KM_2026030500_2026030606.tif
+  [30/69] h031  WRF_cpt_07KM_2026030500_2026030607.tif
+  [31/69] h032  WRF_cpt_07KM_2026030500_2026030608.tif
+  [32/69] h033  WRF_cpt_07KM_2026030500_2026030609.tif
+  [33/69] h034  WRF_cpt_07KM_2026030500_2026030610.tif
+  [34/69] h035  WRF_cpt_07KM_2026030500_2026030611.tif
+  [35/69] h036  WRF_cpt_07KM_2026030500_2026030612.tif
+  [36/69] h039  WRF_cpt_07KM_2026030500_2026030615.tif
+  [37/69] h040  WRF_cpt_07KM_2026030500_2026030616.tif
+  [38/69] h041  WRF_cpt_07KM_2026030500_2026030617.tif
+  [39/69] h042  WRF_cpt_07KM_2026030500_2026030618.tif
+  [40/69] h043  WRF_cpt_07KM_2026030500_2026030619.tif
+  [41/69] h044  WRF_cpt_07KM_2026030500_2026030620.tif
+  [42/69] h045  WRF_cpt_07KM_2026030500_2026030621.tif
+  [43/69] h046  WRF_cpt_07KM_2026030500_2026030622.tif
+  [44/69] h047  WRF_cpt_07KM_2026030500_2026030623.tif
+  [45/69] h048  WRF_cpt_07KM_2026030500_2026030700.tif
+  [46/69] h049  WRF_cpt_07KM_2026030500_2026030701.tif
+  [47/69] h050  WRF_cpt_07KM_2026030500_2026030702.tif
+  [48/69] h051  WRF_cpt_07KM_2026030500_2026030703.tif
+  [49/69] h052  WRF_cpt_07KM_2026030500_2026030704.tif
+  [50/69] h053  WRF_cpt_07KM_2026030500_2026030705.tif
+  [51/69] h054  WRF_cpt_07KM_2026030500_2026030706.tif
+  [52/69] h055  WRF_cpt_07KM_2026030500_2026030707.tif
+  [53/69] h056  WRF_cpt_07KM_2026030500_2026030708.tif
+  [54/69] h057  WRF_cpt_07KM_2026030500_2026030709.tif
+  [55/69] h058  WRF_cpt_07KM_2026030500_2026030710.tif
+  [56/69] h059  WRF_cpt_07KM_2026030500_2026030711.tif
+  [57/69] h060  WRF_cpt_07KM_2026030500_2026030712.tif
+  [58/69] h061  WRF_cpt_07KM_2026030500_2026030713.tif
+  [59/69] h062  WRF_cpt_07KM_2026030500_2026030714.tif
+  [60/69] h063  WRF_cpt_07KM_2026030500_2026030715.tif
+  [61/69] h064  WRF_cpt_07KM_2026030500_2026030716.tif
+  [62/69] h065  WRF_cpt_07KM_2026030500_2026030717.tif
+  [63/69] h066  WRF_cpt_07KM_2026030500_2026030718.tif
+  [64/69] h067  WRF_cpt_07KM_2026030500_2026030719.tif
+  [65/69] h068  WRF_cpt_07KM_2026030500_2026030720.tif
+  [66/69] h069  WRF_cpt_07KM_2026030500_2026030721.tif
+  [67/69] h070  WRF_cpt_07KM_2026030500_2026030722.tif
+  [68/69] h071  WRF_cpt_07KM_2026030500_2026030723.tif
+  [69/69] h072  WRF_cpt_07KM_2026030500_2026030800.tif
+
+Hourly rainfall table (mm):
+# A tibble: 68 × 4
+   valid_utc           forecast_hour  accum_mm  rain_mm
+   <dttm>                      <dbl>     <dbl>    <dbl>
+ 1 2026-03-05 03:00:00             3  0        0       
+ 2 2026-03-05 04:00:00             4  0        0       
+ 3 2026-03-05 05:00:00             5  0        0       
+ 4 2026-03-05 06:00:00             6  0.000667 0.000667
+ 5 2026-03-05 07:00:00             7  0.00133  0.000667
+ 6 2026-03-05 08:00:00             8  0.00133  0       
+ 7 2026-03-05 09:00:00             9  0.00133  0       
+ 8 2026-03-05 10:00:00            10  0.0160   0.0147  
+ 9 2026-03-05 11:00:00            11  0.0640   0.0480  
+10 2026-03-05 12:00:00            12  0.181    0.117   
+11 2026-03-05 13:00:00            13  0.205    0.0240  
+12 2026-03-05 14:00:00            14  0.205    0       
+13 2026-03-05 15:00:00            15  0.205    0       
+14 2026-03-05 16:00:00            16  0.205    0       
+15 2026-03-05 17:00:00            17  0.205    0       
+16 2026-03-05 18:00:00            18  0.205    0       
+17 2026-03-05 19:00:00            19  0.205    0       
+18 2026-03-05 20:00:00            20  0.205    0       
+19 2026-03-05 21:00:00            21  0.205    0       
+20 2026-03-05 22:00:00            22  0.205    0       
+21 2026-03-05 23:00:00            23  0.205    0       
+22 2026-03-06 00:00:00            24  0.205    0       
+23 2026-03-06 01:00:00            25  0.205    0       
+24 2026-03-06 02:00:00            26  0.205    0       
+25 2026-03-06 03:00:00            27  0.205    0       
+26 2026-03-06 04:00:00            28  0.205    0       
+27 2026-03-06 05:00:00            29  0.205    0       
+28 2026-03-06 06:00:00            30  0.208    0.00267 
+29 2026-03-06 07:00:00            31  0.208    0       
+30 2026-03-06 08:00:00            32  0.208    0       
+31 2026-03-06 09:00:00            33  0.211    0.00267 
+32 2026-03-06 10:00:00            34  0.211    0       
+33 2026-03-06 11:00:00            35  0.213    0.00267 
+34 2026-03-06 12:00:00            36  0.213    0       
+35 2026-03-06 15:00:00            39  0.213    0       
+36 2026-03-06 16:00:00            40  0.213    0       
+37 2026-03-06 17:00:00            41  0.213    0       
+38 2026-03-06 18:00:00            42  0.213    0       
+39 2026-03-06 19:00:00            43  0.213    0       
+40 2026-03-06 20:00:00            44  0.213    0       
+41 2026-03-06 21:00:00            45  0.213    0       
+42 2026-03-06 22:00:00            46  0.213    0       
+43 2026-03-06 23:00:00            47  0.213    0       
+44 2026-03-07 00:00:00            48  0.213    0       
+45 2026-03-07 01:00:00            49  0.213    0       
+46 2026-03-07 02:00:00            50  0.213    0       
+47 2026-03-07 03:00:00            51  0.216    0.00267 
+48 2026-03-07 04:00:00            52  0.253    0.0373  
+49 2026-03-07 05:00:00            53  0.440    0.187   
+50 2026-03-07 06:00:00            54  0.501    0.0613  
+51 2026-03-07 07:00:00            55  0.560    0.0587  
+52 2026-03-07 08:00:00            56  0.560    0       
+53 2026-03-07 09:00:00            57  0.560    0       
+54 2026-03-07 10:00:00            58  0.584    0.0240  
+55 2026-03-07 11:00:00            59  0.648    0.0640  
+56 2026-03-07 12:00:00            60  0.672    0.0240  
+57 2026-03-07 13:00:00            61  0.707    0.0347  
+58 2026-03-07 14:00:00            62  0.757    0.0507  
+59 2026-03-07 15:00:00            63  0.795    0.0373  
+60 2026-03-07 16:00:00            64  0.824    0.0293  
+61 2026-03-07 17:00:00            65  0.848    0.0240  
+62 2026-03-07 18:00:00            66  0.912    0.0640  
+63 2026-03-07 19:00:00            67  1.29     0.379   
+64 2026-03-07 20:00:00            68  1.38     0.0853  
+65 2026-03-07 21:00:00            69  2.14     0.765   
+66 2026-03-07 22:00:00            70  7.18     5.03    
+67 2026-03-07 23:00:00            71  9.23     2.05    
+68 2026-03-08 00:00:00            72 11.1      1.86    
+
+Loading CEP list from:  outputs/cep_list.rds 
+  135186 geocoded CEP points loaded (295 municipalities)
+  Sample:
+  municipio      localidade   cep_fmt       lon       lat
+1   PALHOCA BARRA DO ARIRIU 88134-375 -48.64177 -27.68352
+2   PALHOCA JARDIM ELDORADO 88133-315 -48.66622 -27.62999
+3   PALHOCA          CENTRO 88131-160 -48.67061 -27.65430
+4   PALHOCA     PASSA VINTE 88132-100 -48.67109 -27.64090
+5   PALHOCA   PRAIA DO MEIO 88139-249 -48.59942 -27.85211
+
+Extracting rainfall for all CEPs x all forecast hours...
+  (135186 points x up to 72 hours = up to 9733392 extractions)
+Discovered 69 .tif files.
+  [1/69] h002  WRF_cpt_07KM_2026030500_2026030502.tif
+  [2/69] h003  WRF_cpt_07KM_2026030500_2026030503.tif
+  [3/69] h004  WRF_cpt_07KM_2026030500_2026030504.tif
+  [4/69] h005  WRF_cpt_07KM_2026030500_2026030505.tif
+  [5/69] h006  WRF_cpt_07KM_2026030500_2026030506.tif
+  [6/69] h007  WRF_cpt_07KM_2026030500_2026030507.tif
+  [7/69] h008  WRF_cpt_07KM_2026030500_2026030508.tif
+  [8/69] h009  WRF_cpt_07KM_2026030500_2026030509.tif
+  [9/69] h010  WRF_cpt_07KM_2026030500_2026030510.tif
+  [10/69] h011  WRF_cpt_07KM_2026030500_2026030511.tif
+  [11/69] h012  WRF_cpt_07KM_2026030500_2026030512.tif
+  [12/69] h013  WRF_cpt_07KM_2026030500_2026030513.tif
+  [13/69] h014  WRF_cpt_07KM_2026030500_2026030514.tif
+  [14/69] h015  WRF_cpt_07KM_2026030500_2026030515.tif
+  [15/69] h016  WRF_cpt_07KM_2026030500_2026030516.tif
+  [16/69] h017  WRF_cpt_07KM_2026030500_2026030517.tif
+  [17/69] h018  WRF_cpt_07KM_2026030500_2026030518.tif
+  [18/69] h019  WRF_cpt_07KM_2026030500_2026030519.tif
+  [19/69] h020  WRF_cpt_07KM_2026030500_2026030520.tif
+  [20/69] h021  WRF_cpt_07KM_2026030500_2026030521.tif
+  [21/69] h022  WRF_cpt_07KM_2026030500_2026030522.tif
+  [22/69] h023  WRF_cpt_07KM_2026030500_2026030523.tif
+  [23/69] h024  WRF_cpt_07KM_2026030500_2026030600.tif
+  [24/69] h025  WRF_cpt_07KM_2026030500_2026030601.tif
+  [25/69] h026  WRF_cpt_07KM_2026030500_2026030602.tif
+  [26/69] h027  WRF_cpt_07KM_2026030500_2026030603.tif
+  [27/69] h028  WRF_cpt_07KM_2026030500_2026030604.tif
+  [28/69] h029  WRF_cpt_07KM_2026030500_2026030605.tif
+  [29/69] h030  WRF_cpt_07KM_2026030500_2026030606.tif
+  [30/69] h031  WRF_cpt_07KM_2026030500_2026030607.tif
+  [31/69] h032  WRF_cpt_07KM_2026030500_2026030608.tif
+  [32/69] h033  WRF_cpt_07KM_2026030500_2026030609.tif
+  [33/69] h034  WRF_cpt_07KM_2026030500_2026030610.tif
+  [34/69] h035  WRF_cpt_07KM_2026030500_2026030611.tif
+  [35/69] h036  WRF_cpt_07KM_2026030500_2026030612.tif
+  [36/69] h039  WRF_cpt_07KM_2026030500_2026030615.tif
+  [37/69] h040  WRF_cpt_07KM_2026030500_2026030616.tif
+  [38/69] h041  WRF_cpt_07KM_2026030500_2026030617.tif
+  [39/69] h042  WRF_cpt_07KM_2026030500_2026030618.tif
+  [40/69] h043  WRF_cpt_07KM_2026030500_2026030619.tif
+  [41/69] h044  WRF_cpt_07KM_2026030500_2026030620.tif
+  [42/69] h045  WRF_cpt_07KM_2026030500_2026030621.tif
+  [43/69] h046  WRF_cpt_07KM_2026030500_2026030622.tif
+  [44/69] h047  WRF_cpt_07KM_2026030500_2026030623.tif
+  [45/69] h048  WRF_cpt_07KM_2026030500_2026030700.tif
+  [46/69] h049  WRF_cpt_07KM_2026030500_2026030701.tif
+  [47/69] h050  WRF_cpt_07KM_2026030500_2026030702.tif
+  [48/69] h051  WRF_cpt_07KM_2026030500_2026030703.tif
+  [49/69] h052  WRF_cpt_07KM_2026030500_2026030704.tif
+  [50/69] h053  WRF_cpt_07KM_2026030500_2026030705.tif
+  [51/69] h054  WRF_cpt_07KM_2026030500_2026030706.tif
+  [52/69] h055  WRF_cpt_07KM_2026030500_2026030707.tif
+  [53/69] h056  WRF_cpt_07KM_2026030500_2026030708.tif
+  [54/69] h057  WRF_cpt_07KM_2026030500_2026030709.tif
+  [55/69] h058  WRF_cpt_07KM_2026030500_2026030710.tif
+  [56/69] h059  WRF_cpt_07KM_2026030500_2026030711.tif
+  [57/69] h060  WRF_cpt_07KM_2026030500_2026030712.tif
+  [58/69] h061  WRF_cpt_07KM_2026030500_2026030713.tif
+  [59/69] h062  WRF_cpt_07KM_2026030500_2026030714.tif
+  [60/69] h063  WRF_cpt_07KM_2026030500_2026030715.tif
+  [61/69] h064  WRF_cpt_07KM_2026030500_2026030716.tif
+  [62/69] h065  WRF_cpt_07KM_2026030500_2026030717.tif
+  [63/69] h066  WRF_cpt_07KM_2026030500_2026030718.tif
+  [64/69] h067  WRF_cpt_07KM_2026030500_2026030719.tif
+  [65/69] h068  WRF_cpt_07KM_2026030500_2026030720.tif
+  [66/69] h069  WRF_cpt_07KM_2026030500_2026030721.tif
+  [67/69] h070  WRF_cpt_07KM_2026030500_2026030722.tif
+  [68/69] h071  WRF_cpt_07KM_2026030500_2026030723.tif
+  [69/69] h072  WRF_cpt_07KM_2026030500_2026030800.tif
+
+Extraction complete: 9287564 rows (40270 CEPs x 69 hours with data)
+            used  (Mb) gc trigger   (Mb)  max used   (Mb)
+Ncells   2841256 151.8    5896538  315.0   5896538  315.0
+Vcells 108494986 827.8  316416118 2414.1 309346369 2360.2
+
+Exporting spatial files...
+
+Building nested GeoJSON (1 feature per CEP)...
+  Building 40270 features (vectorised)...
+  Serialising to JSON...
+  -> wrf_cep_forecast_2026030500_nested.geojson  |  40270 features  |  377.4 MB
+
+40270 CEPs  x  69 forecast hours  =  2778630 data points
+
+Rain intensity summary:
+
+   heavy    light moderate     none 
+    5573  2058966    70242  7152783 
+
+Rain range (mm):  min=0.000  median=0.000  max=26.392  total=865,229.6 mm
+
+Files written:
+  outputs/wrf_cep_forecast_2026030500_nested.geojson       377.4 MB
+Map saved to: outputs/forecast_map_2026030500.png
+Size check: outputs/latest.json = 0.00 MB
+Size check: outputs/available_runs.json = 0.00 MB
+Size check: outputs/points_lite_now_latest.geojson = 11.09 MB
+Size check: outputs/points_lite_peak_12_latest.geojson = 11.09 MB
+Size check: outputs/points_lite_peak_24_latest.geojson = 11.09 MB
+Size check: outputs/points_lite_peak_48_latest.geojson = 11.14 MB
+Size check: outputs/points_lite_peak_72_latest.geojson = 11.14 MB
+Lovable artifacts written for run_id=2026030500
