@@ -1,38 +1,20 @@
 ###############################################################
-# WRF / GRIB2 – hourly rainfall forecast
+# WRF / GRIB2 – hourly rainfall forecast + SC CEP exports
+# + Grid export (rain/temp/wind) + Leaflet HTML maps
 #
-#  Step 0 : Configuration
-#  Step 1 : Download  (original working downloader, unchanged)
-#  Step 2 : Crop & delete (clip GRIB2 to shapefile bbox → .tif, delete GRIB2)
-#  Step 3 : Discover files & parse metadata
-#  Step 4 : Extract precip layer + compute TRUE hourly rain
-#  Step 5 : Plot by MUNICIPALITY (polygon mean) or by CEP (point)
-#
-# Memory strategy
-# ---------------
-#  Full WRF GRIB2 covers all of South America (~20 MB each).
-#  After download we immediately:
-#    (a) crop to the shapefile bounding box + buffer
-#    (b) save as a small .tif  (typically < 200 KB for SC)
-#    (c) delete the original GRIB2
-#  All subsequent reads use the tiny .tif files.
-#
-# Mathematical rationale
-# ----------------------
-#  WRF "Total precipitation" in GRIB2 is ACCUMULATED (mm) since
-#  model initialisation (t=0).  Converting to mm/hour:
-#
-#    rain_mm[h] = accum[h] - accum[h-1]          (within one run)
-#
-#  Rules that make this correct:
-#   (a) Group by init_utc BEFORE differencing — accumulation resets
-#       to 0 at each new init, so cross-run diffs produce nonsense.
-#   (b) h=0 (first step) is set to NA  (no prior step exists).
-#   (c) Negative diffs (numerical noise) are clamped to 0.
-#   (d) kg/m^2 == mm for liquid water (density 1000 kg/m^3).
+# Step 0 : Configuration
+# Step 1 : Download
+# Step 2 : Crop & delete (UPDATED: write *_vars.tif with precip+temp+wind)
+# Step 3 : Discover files & parse metadata (prefer *_vars.tif)
+# Step 4 : Extract precip layer + compute TRUE hourly rain
+# Step 5 : Plot by MUNICIPALITY (polygon mean) or by CEP (point)
+# Step 6 : CEP all-hours export (nested geojson + optional fgb/shp)
+# Step 7 : Lovable artifacts
+# Step 8 : Grid export (nested json + optional shp) + 4 HTML maps
 #
 # Requires: terra, sf, dplyr, ggplot2, lubridate, stringr,
-#           rvest, httr, future, furrr, geocodebr, progressr
+#           rvest, httr, future, furrr, geocodebr, progressr,
+#           jsonlite, tibble, viridis, cli, ragg, glue
 ###############################################################
 
 suppressPackageStartupMessages({
@@ -65,62 +47,65 @@ if (GHA_MODE) {
 }
 
 # =============================================================
+# TIMEZONE HELPERS
+# =============================================================
+BRT_TZ <- "America/Sao_Paulo"
+
+utc_to_brt <- function(x) lubridate::with_tz(x, tzone = BRT_TZ)
+fmt_brt_label <- function(x) paste0(format(utc_to_brt(x), "%d/%m %H:%M"), " BRT")
+fmt_utc_iso <- function(x) format(as.POSIXct(x, tz = "UTC"), "%Y-%m-%dT%H:%M:%SZ")
+fmt_brt_iso <- function(x) format(as.POSIXct(x, tz = "UTC"), tz = BRT_TZ, "%Y-%m-%dT%H:%M:%S%z")
+
+# =============================================================
 # STEP 0 — USER CONFIGURATION  (edit this block only)
 # =============================================================
 
 ## ---- 0a) Desired output mode ----
 # "municipality"  -> polygon mean over a Brazilian municipality
 # "cep"           -> nearest grid cell to a Brazilian CEP (postcode)
-OUTPUT_MODE <- "municipality"   # or "cep"
+# "all_sc_ceps"   -> always run Step 6/7 (all CEPs) and skip Step 5 target extraction
+OUTPUT_MODE <- if (GHA_MODE) "all_sc_ceps" else "municipality"
 
 ## ---- 0b) Target location ----
 MUNICIPIO_NAME <- "Joinville"   # used when OUTPUT_MODE == "municipality"
 CEP            <- "89201-100"   # used when OUTPUT_MODE == "cep"
-# any format works: "89201-100", "89201100", 89201100
 
 ## ---- 0c) Shapefile (municipalities) ----
-# Also used as the crop bounding box, so both modes benefit from memory savings.
 SHP_PATH <- "./data/shp/SC_Municipios_2024/SC_Municipios_2024.shp"
 
 ## ---- 0d) WRF run ----
-# Explicit string "YYYY-MM-DD HH:MM" or NULL to auto-detect latest 00Z/12Z.
-RUN_START <- NULL   # e.g. "2026-03-04 00:00"
-# GHA: override with env var set by workflow_dispatch input
+RUN_START <- NULL
 if (GHA_MODE && nzchar(Sys.getenv("WRF_RUN_START")))
   RUN_START <- Sys.getenv("WRF_RUN_START")
 
 ## ---- 0e) Forecast window ----
 FORECAST_START_HR <- 0
 FORECAST_END_HR   <- 72
-# GHA: override with env var
 if (GHA_MODE && nzchar(Sys.getenv("WRF_FORECAST_END_HR")))
   FORECAST_END_HR <- as.integer(Sys.getenv("WRF_FORECAST_END_HR"))
 
 ## ---- 0f) Paths & workers ----
-# Files land at: OUTPUT_DIR/<YYYYMMDD>/hXXX/<filename>.tif
 OUTPUT_DIR <- "data/WRF_downloads"
-N_WORKERS  <- if (GHA_MODE) 2L else min(8L, max(1L, parallel::detectCores(logical=FALSE)))
+N_WORKERS  <- if (GHA_MODE) 2L else min(8L, max(1L, parallel::detectCores(logical = FALSE)))
 
 ## ---- 0g) Pipeline switches ----
-# Path to the pre-built CEP list produced by 00_build_cep_list.R
-# Run that script once; afterwards this loads in milliseconds.
 CEP_LIST_PATH <- "outputs/cep_list.rds"
 
 ## ---- 0h) Export formats ----
-# In GHA only "geojson_nested" is produced (smallest + fastest).
-# Add "fgb" or "shp" locally if you also need QGIS/ArcGIS formats.
 EXPORT_FORMATS <- if (GHA_MODE) c("geojson_nested") else c("geojson_nested", "fgb", "shp")
 
+## ---- 0i) Step 8 grid outputs ----
+GRID_EXPORT_JSON <- TRUE
+GRID_EXPORT_SHP  <- !GHA_MODE       # keep repo small in GHA
+GRID_EXPORT_HTML <- TRUE
+MAX_GRID_JSON_MB <- 95
 
-SKIP_DOWNLOAD   <- FALSE   # TRUE = files already on disk, skip download
-SKIP_CROP       <- FALSE   # TRUE = .tif files already exist, skip crop step
-CROP_BUFFER_DEG <- 0.5     # degrees of padding around shapefile bbox
+SKIP_DOWNLOAD   <- FALSE
+SKIP_CROP       <- FALSE
+CROP_BUFFER_DEG <- 0.5
 
 # =============================================================
-# STEP 1 — DOWNLOADER
-# Original working code preserved exactly.
-# Key fix vs previous version: dated_dir uses YYYYMMDD (no hour),
-# matching the path structure that was confirmed to work.
+# STEP 1 — DOWNLOADER (original working code preserved)
 # =============================================================
 
 parse_yyyymmddhh_utc <- function(x) lubridate::ymd_h(x, tz = "UTC")
@@ -198,6 +183,7 @@ download_wrf_parallel <- function(
   if (verbose) {
     cat("================================================================\n")
     cat(sprintf("Run init  : %s UTC (%02dZ)\n", format(run_dt, "%Y-%m-%d %H:%M"), hour))
+    cat(sprintf("Run init  : %s\n", fmt_brt_label(run_dt)))
     cat(sprintf("Fcst hrs  : %d to %d\n", forecast_start, forecast_end))
     cat(sprintf("Base URL  : %s\n", base_url))
     cat(sprintf("Local dir : %s\n", dated_dir))
@@ -254,8 +240,8 @@ download_wrf_parallel <- function(
 
   for (d in unique(file_df$local_dir)) dir.create(d, showWarnings=FALSE, recursive=TRUE)
 
-  # A file is "done" if the GRIB2 OR its cropped .tif already exists
-  tif_paths <- sub("\\.grib2$", ".tif", file_df$local_path, ignore.case=TRUE)
+  # A file is "done" if GRIB2 OR its cropped *_vars.tif already exists
+  tif_paths <- sub("\\.grib2$", "_vars.tif", file_df$local_path, ignore.case=TRUE)
   file_df$exists <- file.exists(file_df$local_path) | file.exists(tif_paths)
   to_get <- file_df[!file_df$exists, ]
 
@@ -391,23 +377,16 @@ detect_latest_run <- function(max_lookback_days=3, timeout_sec=30) {
       lubridate::day(run_dt),  lubridate::hour(run_dt))
     resp <- tryCatch(httr::HEAD(url, httr::timeout(timeout_sec)), error=function(e) NULL)
     if (!is.null(resp) && httr::status_code(resp) %in% 200:399) {
-      message(sprintf("Auto-detected latest run: %s UTC", format(run_dt,"%Y-%m-%d %H:%M")))
+      message(sprintf("Auto-detected latest run: %s UTC (%s)",
+                      format(run_dt,"%Y-%m-%d %H:%M"), fmt_brt_label(run_dt)))
       return(run_dt)
     }
   }
   stop("Could not find a reachable WRF run. Set RUN_START manually.")
 }
 
-
 # =============================================================
-# STEP 2 — CROP & DELETE
-# After downloading, immediately:
-#   1. Read the precip layer from the full-domain GRIB2
-#   2. Crop to the shapefile bounding box + CROP_BUFFER_DEG
-#   3. Save as LZW-compressed .tif  (same filename stem, same folder)
-#   4. Delete the original .grib2
-#
-# Result: ~20 MB GRIB2 becomes ~100-200 KB .tif for SC extent.
+# STEP 2 — CROP & DELETE (UPDATED: multi-variable stack)
 # =============================================================
 
 pick_precip_layer <- function(r, verbose=FALSE) {
@@ -434,6 +413,34 @@ pick_precip_layer <- function(r, verbose=FALSE) {
   stop("No precipitation layer found.\nLayer names:\n", paste(nm, collapse="\n"))
 }
 
+pick_temp2m_layer <- function(r, verbose = FALSE) {
+  nm <- names(r)
+  try_idx <- function(pat) grep(pat, nm, ignore.case=TRUE)
+
+  idx <- try_idx("2 metre temperature|2m temperature|TMP.*2 m|T2M|t2m")
+  if (length(idx)) { if(verbose) message("  layer: ", nm[idx[1]]); return(r[[idx[1]]]) }
+
+  # fallback: any temperature
+  idx <- try_idx("temperature|TMP")
+  if (length(idx)) { if(verbose) message("  layer: ", nm[idx[1]]); return(r[[idx[1]]]) }
+
+  NULL
+}
+
+pick_wind_gust_layer <- function(r, verbose = FALSE) {
+  nm <- names(r)
+  try_idx <- function(pat) grep(pat, nm, ignore.case=TRUE)
+
+  idx <- try_idx("gust|GUST")
+  if (length(idx)) { if(verbose) message("  layer: ", nm[idx[1]]); return(r[[idx[1]]]) }
+
+  # fallback: wind speed 10m
+  idx <- try_idx("10 metre.*wind|10m wind|wind speed|WIND10|WSPD10")
+  if (length(idx)) { if(verbose) message("  layer: ", nm[idx[1]]); return(r[[idx[1]]]) }
+
+  NULL
+}
+
 get_crop_extent <- function(shp_path, buffer_deg=0.5) {
   v   <- terra::vect(shp_path)
   ext <- terra::ext(v)
@@ -442,18 +449,24 @@ get_crop_extent <- function(shp_path, buffer_deg=0.5) {
 }
 
 crop_and_save_one <- function(grib2_path, crop_ext_lonlat, verbose=FALSE) {
-  tif_path <- sub("\\.grib2$", ".tif", grib2_path, ignore.case=TRUE)
+  # NEW output
+  tif_path <- sub("\\.grib2$", "_vars.tif", grib2_path, ignore.case=TRUE)
 
-  if (file.exists(tif_path) && !file.exists(grib2_path)) return(tif_path)  # already done
+  if (file.exists(tif_path) && !file.exists(grib2_path)) return(tif_path)
   if (file.exists(tif_path) && file.exists(grib2_path)) {
-    file.remove(grib2_path); return(tif_path)                               # tif ok, clean up
+    file.remove(grib2_path); return(tif_path)
   }
 
   tryCatch({
     r <- terra::rast(grib2_path)
-    p <- pick_precip_layer(r, verbose=verbose)
 
-    # Reproject crop window to raster CRS when needed
+    p <- pick_precip_layer(r, verbose=verbose)
+    t <- pick_temp2m_layer(r, verbose=verbose)
+    w <- pick_wind_gust_layer(r, verbose=verbose)
+
+    if (is.null(t)) warning("Temp layer not found in: ", basename(grib2_path))
+    if (is.null(w)) warning("Wind layer not found in: ", basename(grib2_path))
+
     crop_ext_use <- if (!terra::is.lonlat(p)) {
       pts <- terra::vect(
         data.frame(x=c(crop_ext_lonlat$xmin, crop_ext_lonlat$xmax,
@@ -462,10 +475,32 @@ crop_and_save_one <- function(grib2_path, crop_ext_lonlat, verbose=FALSE) {
                        crop_ext_lonlat$ymax, crop_ext_lonlat$ymax)),
         geom=c("x","y"), crs="EPSG:4326")
       terra::ext(terra::project(pts, terra::crs(p)))
-    } else { crop_ext_lonlat }
+    } else crop_ext_lonlat
 
     p_crop <- terra::crop(p, crop_ext_use)
-    terra::writeRaster(p_crop, tif_path, overwrite=TRUE, gdal=c("COMPRESS=LZW"))
+
+    if (!is.null(t)) {
+      t_crop <- terra::crop(t, crop_ext_use)
+      if (!isTRUE(all.equal(terra::res(t_crop), terra::res(p_crop))) ||
+          !isTRUE(all.equal(terra::ext(t_crop), terra::ext(p_crop))))
+        t_crop <- terra::resample(t_crop, p_crop, method = "bilinear")
+    } else {
+      t_crop <- p_crop; terra::values(t_crop) <- NA_real_
+    }
+
+    if (!is.null(w)) {
+      w_crop <- terra::crop(w, crop_ext_use)
+      if (!isTRUE(all.equal(terra::res(w_crop), terra::res(p_crop))) ||
+          !isTRUE(all.equal(terra::ext(w_crop), terra::ext(p_crop))))
+        w_crop <- terra::resample(w_crop, p_crop, method = "bilinear")
+    } else {
+      w_crop <- p_crop; terra::values(w_crop) <- NA_real_
+    }
+
+    vars <- c(p_crop, t_crop, w_crop)
+    names(vars) <- c("precip_acc_mm", "t2m_k", "wind_gust_ms")
+
+    terra::writeRaster(vars, tif_path, overwrite=TRUE, gdal=c("COMPRESS=LZW"))
     file.remove(grib2_path)
     tif_path
   }, error=function(e) {
@@ -487,11 +522,8 @@ crop_run_directory <- function(run_dir, shp_path, buffer_deg=0.5, verbose=TRUE) 
   size_before <- sum(file.info(grib2_files)$size, na.rm=TRUE) / 1024^2
 
   if (verbose) {
-    cat(sprintf("\nCropping %d GRIB2 files to shapefile bbox + %.1f deg buffer...\n",
+    cat(sprintf("\nCropping %d GRIB2 files → *_vars.tif (precip+temp+wind) + %.1f deg buffer...\n",
                 length(grib2_files), buffer_deg))
-    cat(sprintf("  Extent: %.2fW to %.2fE, %.2fS to %.2fN\n",
-                abs(crop_ext$xmin), abs(crop_ext$xmax),
-                abs(crop_ext$ymin), abs(crop_ext$ymax)))
   }
 
   results <- vapply(seq_along(grib2_files), function(i) {
@@ -504,23 +536,27 @@ crop_run_directory <- function(run_dir, shp_path, buffer_deg=0.5, verbose=TRUE) 
   size_after <- sum(file.info(tif_ok)$size, na.rm=TRUE) / 1024^2
 
   if (verbose) {
-    cat(sprintf("\nCrop complete: %d / %d files converted to .tif\n",
+    cat(sprintf("\nCrop complete: %d / %d files converted to *_vars.tif\n",
                 length(tif_ok), length(grib2_files)))
-    cat(sprintf("Disk usage: %.1f MB (GRIB2)  ->  %.1f MB (.tif)  [%.0f%% saved]\n\n",
-                size_before, size_after, 100*(1 - size_after/max(size_before,1))))
+    cat(sprintf("Disk usage: %.1f MB (GRIB2)  ->  %.1f MB (vars.tif)\n\n",
+                size_before, size_after))
   }
   invisible(results)
 }
 
-
 # =============================================================
 # STEP 3 — FILE DISCOVERY & METADATA
-# Finds .tif (post-crop) first; falls back to .grib2
+# Prefer *_vars.tif; fallback to *.tif; fallback to *.grib2
 # =============================================================
 
 discover_wrf_files <- function(run_dir) {
-  files <- list.files(run_dir, pattern="\\.tif$",   full.names=TRUE, recursive=TRUE)
-  ext_used <- "tif"
+  files <- list.files(run_dir, pattern="_vars\\.tif$", full.names=TRUE, recursive=TRUE)
+  ext_used <- "vars.tif"
+
+  if (!length(files)) {
+    files <- list.files(run_dir, pattern="\\.tif$", full.names=TRUE, recursive=TRUE)
+    ext_used <- "tif"
+  }
   if (!length(files)) {
     files    <- list.files(run_dir, pattern="\\.grib2$", full.names=TRUE, recursive=TRUE)
     ext_used <- "grib2"
@@ -528,11 +564,14 @@ discover_wrf_files <- function(run_dir) {
   if (!length(files)) stop("No .tif or .grib2 files found under: ", run_dir)
   message(sprintf("Discovered %d .%s files.", length(files), ext_used))
 
-  base      <- tools::file_path_sans_ext(basename(files))
-  p1        <- "^WRF_cpt_07KM_(\\d{10})_(\\d{10})$"
-  p2        <- "^WRF_cpt_07KM_(\\d{10})$"
-  is_p1     <- grepl(p1, base)
-  is_p2     <- grepl(p2, base) & !is_p1
+  base <- tools::file_path_sans_ext(basename(files))
+  base <- sub("_vars$", "", base)
+
+  p1 <- "^WRF_cpt_07KM_(\\d{10})_(\\d{10})$"
+  p2 <- "^WRF_cpt_07KM_(\\d{10})$"
+  is_p1 <- grepl(p1, base)
+  is_p2 <- grepl(p2, base) & !is_p1
+
   init_str  <- dplyr::case_when(is_p1~sub(p1,"\\1",base), is_p2~sub(p2,"\\1",base), TRUE~NA_character_)
   valid_str <- dplyr::case_when(is_p1~sub(p1,"\\2",base), is_p2~sub(p2,"\\1",base), TRUE~NA_character_)
 
@@ -549,14 +588,22 @@ discover_wrf_files <- function(run_dir) {
     file          = files,
     init_utc      = init_utc,
     forecast_hour = as.numeric(difftime(valid_utc, init_utc, units="hours")),
-    valid_utc     = valid_utc
+    valid_utc     = valid_utc,
+    valid_brt_lbl = vapply(valid_utc, fmt_brt_label, character(1))
   ) |> dplyr::arrange(init_utc, forecast_hour)
 }
 
-
 # =============================================================
 # STEP 4 — EXTRACT & CONVERT TO TRUE HOURLY RAIN
+# (still rain-only for Step 5)
 # =============================================================
+
+extract_precip_acc_layer <- function(r) {
+  if (terra::nlyr(r) == 1) return(r)
+  nm <- names(r)
+  if ("precip_acc_mm" %in% nm) return(r[["precip_acc_mm"]])
+  pick_precip_layer(r, verbose = FALSE)
+}
 
 extract_one_file <- function(file, target_vect, fun=mean, verbose=FALSE) {
   if (!file.exists(file))          { warning("Not found: ", file);          return(NA_real_) }
@@ -564,9 +611,7 @@ extract_one_file <- function(file, target_vect, fun=mean, verbose=FALSE) {
 
   tryCatch({
     r <- terra::rast(file)
-    # .tif files have exactly 1 layer (the precip layer we saved);
-    # raw .grib2 files have many layers and need layer selection.
-    p <- if (terra::nlyr(r) == 1) r else pick_precip_layer(r, verbose=verbose)
+    p <- extract_precip_acc_layer(r)
 
     if (!terra::same.crs(target_vect, p))
       target_vect <- terra::project(target_vect, terra::crs(p))
@@ -582,8 +627,8 @@ extract_one_file <- function(file, target_vect, fun=mean, verbose=FALSE) {
 extract_run_accum <- function(meta, target_vect, fun=mean, verbose=TRUE) {
   out <- vector("list", nrow(meta))
   for (i in seq_len(nrow(meta))) {
-    if (verbose) message(sprintf("  [%d/%d] h%03d  %s",
-                                 i, nrow(meta), meta$forecast_hour[i], basename(meta$file[i])))
+    if (verbose) message(sprintf("  [%d/%d] h%03d  %s (%s)",
+                                 i, nrow(meta), meta$forecast_hour[i], basename(meta$file[i]), meta$valid_brt_lbl[i]))
     out[[i]] <- tibble::tibble(
       init_utc      = meta$init_utc[i],
       forecast_hour = meta$forecast_hour[i],
@@ -636,17 +681,14 @@ extract_rain_cep <- function(run_dir, cep, cep_list_df = NULL, verbose = TRUE) {
   if (verbose) cat("Discovering files...\n")
   meta <- discover_wrf_files(run_dir)
 
-  # Normalise CEP to 8-digit string regardless of input format
   cep_clean <- normalise_cep(cep)
   if (nchar(cep_clean) != 8 || is.na(suppressWarnings(as.integer(cep_clean))))
     stop("Invalid CEP: ", cep, " -> normalised to '", cep_clean, "'")
 
   cep_fmt <- paste0(substr(cep_clean,1,5), "-", substr(cep_clean,6,8))
 
-  # Try to get coordinates from pre-built cep_list first (fast, offline)
   lon <- NA_real_; lat <- NA_real_
   if (!is.null(cep_list_df)) {
-    # cep_list stores CEP as 8-digit string — normalise both sides
     cep_list_df$cep_norm <- normalise_cep(cep_list_df$cep)
     hit <- cep_list_df[cep_list_df$cep_norm == cep_clean, ]
     if (nrow(hit)) {
@@ -659,7 +701,6 @@ extract_rain_cep <- function(run_dir, cep, cep_list_df = NULL, verbose = TRUE) {
     }
   }
 
-  # Fall back to geocodebr if not found in cep_list
   if (is.na(lon) || is.na(lat)) {
     if (verbose) cat(sprintf("CEP %s not in cep_list — geocoding via geocodebr...\n", cep_fmt))
     geo <- geocodebr::busca_por_cep(cep_clean)
@@ -681,7 +722,6 @@ extract_rain_cep <- function(run_dir, cep, cep_list_df = NULL, verbose = TRUE) {
   accum_to_hourly(raw)
 }
 
-
 # =============================================================
 # STEP 5 — PLOTTING
 # =============================================================
@@ -694,7 +734,7 @@ plot_rain_bar <- function(df, title=NULL, subtitle=NULL) {
     return(invisible(NULL))
   }
   p <- ggplot2::ggplot(df_plot, ggplot2::aes(x=valid_utc, y=rain_mm)) +
-    ggplot2::geom_col(fill="#2166ac", width=3600 * 0.9) +  # width in seconds for datetime x-axis
+    ggplot2::geom_col(fill="#2166ac", width=3600 * 0.9) +
     ggplot2::scale_x_datetime(date_labels="%d/%m\n%H:%M", date_breaks="6 hours") +
     ggplot2::labs(title=title, subtitle=subtitle,
                   x="Forecast valid time (UTC)", y="Rainfall (mm / hour)") +
@@ -704,48 +744,20 @@ plot_rain_bar <- function(df, title=NULL, subtitle=NULL) {
       plot.subtitle    = ggplot2::element_text(color="grey40"),
       panel.grid.minor = ggplot2::element_blank()
     )
-  if (identical(Sys.getenv("GHA_MODE"), "true")) {
-    invisible(p)  # don't print to Rplots.pdf in headless mode
-  } else {
-    print(p)
-  }
+  if (identical(Sys.getenv("GHA_MODE"), "true")) invisible(p) else print(p)
   invisible(p)
 }
-
-# Interactive diagnostic for a single file
-diagnose_grib2 <- function(file, target_vect=NULL) {
-  cat("File   :", file, "\n")
-  cat("Exists :", file.exists(file), "\n")
-  cat("Size   :", round(file.info(file)$size/1024, 1), "KB\n")
-  r <- tryCatch(terra::rast(file), error=function(e){cat("rast() ERROR:",e$message,"\n"); NULL})
-  if (is.null(r)) return(invisible(NULL))
-  cat("Layers :", terra::nlyr(r), "\n")
-  cat("Names  :\n"); print(names(r))
-  cat("CRS    :", terra::crs(r, describe=TRUE)$name, "\n")
-  p <- tryCatch(pick_precip_layer(r, verbose=TRUE),
-                error=function(e){cat("pick ERROR:",e$message,"\n"); NULL})
-  if (!is.null(p) && !is.null(target_vect)) {
-    if (!terra::same.crs(target_vect, p)) target_vect <- terra::project(target_vect, terra::crs(p))
-    v <- tryCatch(terra::extract(p, target_vect, fun=mean, na.rm=TRUE),
-                  error=function(e){cat("extract ERROR:",e$message,"\n"); NULL})
-    if (!is.null(v)) { cat("Extract result:\n"); print(v) }
-  }
-  invisible(r)
-}
-
 
 # =============================================================
 # MAIN EXECUTION
 # =============================================================
 
-## ---- Resolve run datetime ----
 run_dt <- if (is.null(RUN_START)) detect_latest_run() else
   lubridate::ymd_hm(RUN_START, tz="UTC")
 
-# run_dir = OUTPUT_DIR/YYYYMMDD/  (matches the downloader's dated_dir)
 run_dir <- file.path(OUTPUT_DIR, format(run_dt, "%Y%m%d"))
+cat(sprintf("\nRun init: %s UTC | %s\n", format(run_dt, "%Y-%m-%d %H:%M"), fmt_brt_label(run_dt)))
 
-## ---- Step 1: Download ----
 if (!SKIP_DOWNLOAD) {
   download_wrf_parallel(
     run_start      = run_dt,
@@ -762,88 +774,60 @@ if (!SKIP_DOWNLOAD) {
   message("SKIP_DOWNLOAD = TRUE  —  using files in: ", run_dir)
 }
 
-gc()  # free memory held by download workers before crop step
-## ---- Step 2: Crop GRIB2 to shapefile bbox, save .tif, delete GRIB2 ----
+gc()
+
 if (!SKIP_CROP) {
   crop_run_directory(run_dir, SHP_PATH,
                      buffer_deg = CROP_BUFFER_DEG,
                      verbose    = TRUE)
 } else {
-  message("SKIP_CROP = TRUE  —  expecting .tif files already in: ", run_dir)
+  message("SKIP_CROP = TRUE  —  expecting *_vars.tif files already in: ", run_dir)
 }
 
-## ---- Steps 3-4: Discover + Extract ----
-if (OUTPUT_MODE == "municipality") {
-  df <- extract_rain_municipality(run_dir, SHP_PATH, MUNICIPIO_NAME, verbose=TRUE)
-} else if (OUTPUT_MODE == "cep") {
-  # Load cep_list for fast coordinate lookup (falls back to geocodebr if not found)
-  cep_list_df <- if (file.exists(CEP_LIST_PATH)) readRDS(CEP_LIST_PATH) else NULL
-  if (is.null(cep_list_df))
-    message("cep_list.rds not found — will geocode via geocodebr (slower).")
-  df <- extract_rain_cep(run_dir, CEP, cep_list_df = cep_list_df, verbose = TRUE)
+# Step 5 (single target) unless in all-sc mode
+if (OUTPUT_MODE %in% c("municipality", "cep")) {
+  if (OUTPUT_MODE == "municipality") {
+    df <- extract_rain_municipality(run_dir, SHP_PATH, MUNICIPIO_NAME, verbose=TRUE)
+  } else {
+    cep_list_df <- if (file.exists(CEP_LIST_PATH)) readRDS(CEP_LIST_PATH) else NULL
+    if (is.null(cep_list_df))
+      message("cep_list.rds not found — will geocode via geocodebr (slower).")
+    df <- extract_rain_cep(run_dir, CEP, cep_list_df = cep_list_df, verbose = TRUE)
+  }
+
+  plot_rain_bar(
+    df,
+    title    = sprintf("%s — WRF hourly rainfall forecast",
+                       if (OUTPUT_MODE=="municipality") MUNICIPIO_NAME else paste0("CEP ", CEP)),
+    subtitle = sprintf("Run init: %s UTC  |  %s",
+                       format(run_dt, "%Y-%m-%d %H:%M"),
+                       if (OUTPUT_MODE=="municipality") "mean over municipality polygon"
+                       else "nearest grid cell")
+  )
+
+  cat("\nHourly rainfall table (mm):\n")
+  print(dplyr::filter(df, !is.na(rain_mm)) |>
+          dplyr::select(valid_utc, forecast_hour, accum_mm, rain_mm),
+        n = Inf)
 } else {
-  stop("OUTPUT_MODE must be 'municipality' or 'cep'. Got: ", OUTPUT_MODE)
+  message("OUTPUT_MODE=", OUTPUT_MODE, " — skipping single-target extraction/plot.")
 }
-
-## ---- Step 5: Plot ----
-plot_rain_bar(
-  df,
-  title    = sprintf("%s — WRF hourly rainfall forecast",
-                     if (OUTPUT_MODE=="municipality") MUNICIPIO_NAME else paste0("CEP ", CEP)),
-  subtitle = sprintf("Run init: %s UTC  |  %s",
-                     format(run_dt, "%Y-%m-%d %H:%M"),
-                     if (OUTPUT_MODE=="municipality") "mean over municipality polygon"
-                     else "nearest grid cell")
-)
-
-## ---- Inspect numbers ----
-cat("\nHourly rainfall table (mm):\n")
-print(dplyr::filter(df, !is.na(rain_mm)) |>
-        dplyr::select(valid_utc, forecast_hour, accum_mm, rain_mm),
-      n = Inf)
-
 
 # =============================================================
 # STEP 6 — SPATIAL EXPORT  (GeoJSON + Shapefile)
-# =============================================================
-#
-# Produces two outputs per forecast run:
-#
-#   outputs/
-#     wrf_cep_forecast_YYYYMMDDHH.geojson   ← all hours, all CEPs in one file
-#                                              (best for Lovable & R mapping)
-#     shp/
-#       wrf_cep_forecast_YYYYMMDDHH.shp     ← same data as shapefile for QGIS
-#
-# Each feature is one CEP × one forecast hour with properties:
-#   cep, label, lon, lat, init_utc, valid_utc, forecast_hour,
-#   accum_mm, rain_mm, rain_class
-#
-# rain_class is a human-readable intensity label:
-#   "none" / "light" / "moderate" / "heavy" / "extreme"
-# (thresholds per WMO guidelines for hourly rainfall)
-#
-# For Lovable: import the .geojson — each hour is a separate feature,
-# filter by `forecast_hour` property to drive a time-slider map.
+# (YOUR ORIGINAL STEP 6 CODE KEPT, WITH PRECIP LAYER FIX APPLIED)
 # =============================================================
 
-# ---- 6a) Rainfall intensity classification (mm/hour) ----
 classify_rain <- function(x) {
   dplyr::case_when(
     is.na(x)  ~ "no data",
     x == 0    ~ "none",
-    x <  2.5  ~ "light",       # < 2.5 mm/h
-    x <  7.5  ~ "moderate",    # 2.5–7.5 mm/h
-    x < 35.0  ~ "heavy",       # 7.5–35 mm/h
-    TRUE      ~ "extreme"      # >= 35 mm/h
+    x <  2.5  ~ "light",
+    x <  7.5  ~ "moderate",
+    x < 35.0  ~ "heavy",
+    TRUE      ~ "extreme"
   )
 }
-
-# ---- 6b) Geocode a named vector of CEPs → sf point layer ----
-#
-# cep_list : named character vector, e.g.:
-#   c("Centro Joinville" = "89201-100", "Norte Joinville" = "89227-315")
-# Names become the "label" column; if unnamed, CEP itself is the label.
 
 geocode_ceps <- function(cep_list) {
   if (is.null(names(cep_list))) names(cep_list) <- cep_list
@@ -876,12 +860,8 @@ geocode_ceps <- function(cep_list) {
   sf::st_as_sf(pts, coords = c("lon","lat"), crs = 4674, remove = FALSE)
 }
 
-# ---- 6c) Extract rain for ALL CEPs across all forecast hours ----
-
 extract_rain_multi_cep <- function(run_dir, cep_sf, verbose = TRUE) {
   meta <- discover_wrf_files(run_dir)
-
-  # Convert to terra SpatVector once
   pts_vect <- terra::vect(cep_sf)
 
   all_out <- vector("list", nrow(meta))
@@ -889,7 +869,8 @@ extract_rain_multi_cep <- function(run_dir, cep_sf, verbose = TRUE) {
   for (i in seq_len(nrow(meta))) {
     fh  <- meta$forecast_hour[i]
     vdt <- meta$valid_utc[i]
-    if (verbose) message(sprintf("  [%d/%d] h%03d  %s", i, nrow(meta), fh, basename(meta$file[i])))
+    if (verbose) message(sprintf("  [%d/%d] h%03d  %s (%s)",
+                                 i, nrow(meta), fh, basename(meta$file[i]), meta$valid_brt_lbl[i]))
 
     f <- meta$file[i]
     if (!file.exists(f) || file.info(f)$size < 100L) {
@@ -899,11 +880,11 @@ extract_rain_multi_cep <- function(run_dir, cep_sf, verbose = TRUE) {
 
     vals <- tryCatch({
       r <- terra::rast(f)
-      p <- if (terra::nlyr(r) == 1) r else pick_precip_layer(r, verbose = FALSE)
+      p <- extract_precip_acc_layer(r)   # <- fix: uses precip_acc_mm when present
       pts2 <- if (!terra::same.crs(pts_vect, p))
         terra::project(pts_vect, terra::crs(p)) else pts_vect
       v <- terra::extract(p, pts2, fun = mean, na.rm = TRUE)
-      as.numeric(v[, 2])   # one value per CEP
+      as.numeric(v[, 2])
     }, error = function(e) {
       warning(sprintf("h%03d extract failed: %s", fh, conditionMessage(e)))
       rep(NA_real_, nrow(cep_sf))
@@ -925,7 +906,6 @@ extract_rain_multi_cep <- function(run_dir, cep_sf, verbose = TRUE) {
 
   df <- dplyr::bind_rows(all_out[!vapply(all_out, is.null, logical(1))])
 
-  # Compute hourly rain per CEP (grouped by init_utc × cep)
   df <- df |>
     dplyr::arrange(init_utc, cep, forecast_hour) |>
     dplyr::group_by(init_utc, cep) |>
@@ -939,34 +919,6 @@ extract_rain_multi_cep <- function(run_dir, cep_sf, verbose = TRUE) {
   df
 }
 
-# ---- 6d) Export spatial outputs ----
-#
-# Three complementary formats, each optimised for a different use case:
-#
-#  "geojson_nested"  ← ONE feature per CEP, hourly values as JSON arrays
-#                      ~40x fewer features than long format
-#                      Best for: Lovable, web maps, R/leaflet
-#                      Typical size: ~5-15 MB for 40K CEPs x 72h
-#
-#  "fgb"             ← FlatGeobuf: binary, spatially indexed, streamable
-#                      Same long-format data but ~60% smaller than GeoJSON
-#                      Best for: QGIS (opens instantly), large datasets
-#
-#  "shp"             ← Shapefile long format, UTF-8 encoded
-#                      Best for: ArcGIS, legacy GIS tools
-#
-# Size-reduction techniques applied in all formats:
-#   • lon/lat rounded to 5 decimal places (~1 m precision — more than enough)
-#   • rain_mm rounded to 3 decimal places (sub-micron precision is noise)
-#   • forecast_hour stored as integer
-#   • ISO timestamps stored as compact strings (no redundant timezone suffix)
-#
-# Size comparison for 40K CEPs × 13 hours (your current run):
-#   Long GeoJSON (old)    : ~500 MB
-#   Nested GeoJSON (new)  : ~12 MB   (40x smaller)
-#   FlatGeobuf            : ~35 MB   long-format but binary
-#   Shapefile             : ~120 MB  long-format
-
 export_spatial <- function(df_multi, run_dt,
                            output_dir = "outputs",
                            formats    = c("geojson_nested", "fgb", "shp"),
@@ -976,15 +928,12 @@ export_spatial <- function(df_multi, run_dt,
   stem    <- sprintf("wrf_cep_forecast_%s", format(run_dt, "%Y%m%d%H"))
   written <- character(0)
 
-  # ------------------------------------------------------------------
-  # Base table: one row per CEP × hour, clean types, rounded values
-  # ------------------------------------------------------------------
   df_base <- df_multi |>
     dplyr::filter(!is.na(rain_mm)) |>
     dplyr::mutate(
-      lon           = round(lon, 5),          # ~1 m precision
+      lon           = round(lon, 5),
       lat           = round(lat, 5),
-      rain_mm       = round(rain_mm,   3),    # 0.001 mm resolution
+      rain_mm       = round(rain_mm,   3),
       accum_mm      = round(accum_mm,  3),
       forecast_hour = as.integer(forecast_hour),
       valid_utc_str = format(valid_utc, "%Y-%m-%dT%H:%M:%SZ"),
@@ -1000,31 +949,12 @@ export_spatial <- function(df_multi, run_dt,
   n_cep   <- length(unique(df_base$cep))
   n_hours <- length(unique(df_base$forecast_hour))
 
-  # ==================================================================
-  # FORMAT 1 — Nested GeoJSON
-  # One feature per CEP; hourly time series encoded as parallel arrays.
-  #
-  # Each feature's properties look like:
-  # {
-  #   "cep": "89201100", "municipio": "Joinville", ...
-  #   "hours":      [1, 2, 3, ...],
-  #   "valid_utc":  ["2026-03-04T01:00:00Z", ...],
-  #   "rain_mm":    [0.000, 0.005, 0.016, ...],
-  #   "rain_class": ["none","light","light", ...],
-  #   "max_rain_mm": 0.025,        ← quick filter without unpacking arrays
-  #   "total_rain_mm": 0.041       ← total accumulated over forecast window
-  # }
-  #
-  # In Lovable / Mapbox: colour by max_rain_mm for a static overview,
-  # or unpack the arrays client-side for a time-slider animation.
-  # ==================================================================
   if ("geojson_nested" %in% formats) {
     if (verbose) cat("\nBuilding nested GeoJSON (1 feature per CEP)...\n")
 
     if (!requireNamespace("jsonlite", quietly = TRUE))
       stop("Package 'jsonlite' required. Install with: install.packages('jsonlite')")
 
-    # Step 1 — scalar summaries
     cep_scalars <- df_base |>
       dplyr::arrange(cep, forecast_hour) |>
       dplyr::group_by(cep) |>
@@ -1040,7 +970,6 @@ export_spatial <- function(df_multi, run_dt,
         .groups = "drop"
       )
 
-    # Step 2 — array columns
     cep_arrays <- df_base |>
       dplyr::arrange(cep, forecast_hour) |>
       dplyr::group_by(cep) |>
@@ -1055,17 +984,9 @@ export_spatial <- function(df_multi, run_dt,
 
     cep_meta <- dplyr::left_join(cep_scalars, cep_arrays, by = "cep")
 
-    # ------------------------------------------------------------------
-    # Write GeoJSON manually with jsonlite so array-valued properties
-    # become TRUE JSON arrays  ([0.0, 0.005, ...])  instead of the
-    # escaped strings  ("[0.0,0.005,...]")  that sf::st_write produces.
-    # This is the key to keeping the file small (~12 MB vs ~85 MB).
-    # ------------------------------------------------------------------
     gj_path <- file.path(output_dir, paste0(stem, "_nested.geojson"))
-
     if (verbose) cat(sprintf("  Building %d features (vectorised)...\n", nrow(cep_meta)))
 
-    # lapply over index — avoids slow row-by-row data frame subsetting
     features <- lapply(seq_len(nrow(cep_meta)), function(i) {
       list(
         type     = "Feature",
@@ -1110,13 +1031,6 @@ export_spatial <- function(df_multi, run_dt,
                   basename(gj_path), nrow(cep_meta), sz))
   }
 
-  # ==================================================================
-  # FORMAT 2 — FlatGeobuf (.fgb)
-  # Binary, spatially indexed, streamable over HTTP.
-  # Same long-format data as the old GeoJSON but ~60% smaller.
-  # Opens natively in QGIS 3.16+ (drag and drop).
-  # Can be streamed in Mapbox/Leaflet via the flatgeobuf JS library.
-  # ==================================================================
   if ("fgb" %in% formats) {
     if (verbose) cat("\nWriting FlatGeobuf (long format, binary)...\n")
 
@@ -1138,11 +1052,6 @@ export_spatial <- function(df_multi, run_dt,
                   basename(fgb_path), nrow(sf_long), sz))
   }
 
-  # ==================================================================
-  # FORMAT 3 — Shapefile (long format, UTF-8)
-  # Column names truncated to 10 chars (shapefile limit).
-  # .cpg sidecar ensures QGIS/ArcGIS read accented names correctly.
-  # ==================================================================
   if ("shp" %in% formats) {
     if (verbose) cat("\nWriting Shapefile (long format, UTF-8)...\n")
 
@@ -1165,7 +1074,7 @@ export_spatial <- function(df_multi, run_dt,
                  layer_options = "ENCODING=UTF-8",
                  delete_dsn    = TRUE,
                  quiet         = TRUE)
-    writeLines("UTF-8", sub("\\.shp$", ".cpg", shp_path))  # encoding sidecar
+    writeLines("UTF-8", sub("\\.shp$", ".cpg", shp_path))
 
     sz <- sum(file.info(list.files(shp_dir, full.names = TRUE))$size,
               na.rm = TRUE) / 1024^2
@@ -1175,19 +1084,11 @@ export_spatial <- function(df_multi, run_dt,
                   basename(shp_path), nrow(sf_shp), sz))
   }
 
-  # ------------------------------------------------------------------
-  # Summary
-  # ------------------------------------------------------------------
   if (verbose) {
     cat(sprintf("\n%d CEPs  x  %d forecast hours  =  %d data points\n",
                 n_cep, n_hours, n_cep * n_hours))
     cat("\nRain intensity summary:\n")
     print(table(df_base$rain_class))
-    cat(sprintf("\nRain range (mm):  min=%.3f  median=%.3f  max=%.3f  total=%s mm\n",
-                min(df_base$rain_mm,    na.rm = TRUE),
-                median(df_base$rain_mm, na.rm = TRUE),
-                max(df_base$rain_mm,    na.rm = TRUE),
-                format(sum(df_base$rain_mm, na.rm = TRUE), big.mark = ",")))
     cat("\nFiles written:\n")
     for (f in written)
       cat(sprintf("  %-55s  %.1f MB\n", f,
@@ -1197,11 +1098,6 @@ export_spatial <- function(df_multi, run_dt,
   invisible(written)
 }
 
-# ---- 6e) Quick R map using ggplot2 (one facet per hour) ----
-#
-# Requires the SC municipalities shapefile for background.
-# Set n_hours_shown to limit the number of facets (e.g. first 12 hours).
-
 plot_rain_map <- function(df_multi, shp_path,
                           n_hours_shown = 12,
                           title         = "WRF hourly rainfall forecast") {
@@ -1209,10 +1105,8 @@ plot_rain_map <- function(df_multi, shp_path,
   if (!requireNamespace("viridis", quietly = TRUE))
     stop("Package 'viridis' required. Install with: install.packages('viridis')")
 
-  # SC background
   sc_sf <- sf::st_read(shp_path, quiet = TRUE) |> sf::st_transform(4326)
 
-  # Filter to first n_hours_shown
   hours_use <- sort(unique(df_multi$forecast_hour[!is.na(df_multi$rain_mm)]))
   hours_use <- head(hours_use, n_hours_shown)
 
@@ -1245,16 +1139,9 @@ plot_rain_map <- function(df_multi, shp_path,
     )
 }
 
-
 # =============================================================
-# STEP 6 — MAIN: build CEP list from Excel, extract, export
+# STEP 6 — MAIN: load CEP list, extract all CEPs, export
 # =============================================================
-
-# ---- 6A) Load pre-built CEP list ----
-#
-# Generated once by 00_build_cep_list.R
-# Contains one row per geocoded CEP point across all SC municipalities.
-# Columns: municipio, localidade, logradouro, cep, cep_fmt, label, lon, lat
 
 if (!file.exists(CEP_LIST_PATH))
   stop(
@@ -1266,7 +1153,6 @@ if (!file.exists(CEP_LIST_PATH))
 cat("\nLoading CEP list from: ", CEP_LIST_PATH, "\n")
 cep_df <- readRDS(CEP_LIST_PATH)
 
-# Ensure CEP column is always clean 8-digit string regardless of how it was saved
 cep_df$cep <- normalise_cep(cep_df$cep)
 cep_sf  <- sf::st_as_sf(cep_df, coords = c("lon","lat"), crs = 4326, remove = FALSE)
 
@@ -1275,7 +1161,6 @@ cat(sprintf("  %d geocoded CEP points loaded (%d municipalities)\n",
 cat(sprintf("  Sample:\n"))
 print(head(cep_df[, intersect(c("municipio","localidade","cep_fmt","lon","lat"), names(cep_df))], 5))
 
-# ---- Extract rainfall for all CEPs x all hours ----
 cat("\nExtracting rainfall for all CEPs x all forecast hours...\n")
 cat(sprintf("  (%d points x up to %d hours = up to %d extractions)\n",
             nrow(cep_sf),
@@ -1289,18 +1174,16 @@ cat(sprintf("\nExtraction complete: %d rows (%d CEPs x %d hours with data)\n",
             length(unique(df_multi$cep)),
             length(unique(df_multi$forecast_hour[!is.na(df_multi$rain_mm)]))))
 
-# ---- Export GeoJSON + Shapefile ----
-gc()  # release df_multi memory before building GeoJSON structures
+gc()
 cat("\nExporting spatial files...\n")
 export_spatial(
   df_multi   = df_multi,
   run_dt     = run_dt,
   output_dir = "outputs",
-  formats    = EXPORT_FORMATS,   # set in Step 0 config; GHA uses geojson_nested only
+  formats    = EXPORT_FORMATS,
   verbose    = TRUE
 )
 
-# ---- Quick R facet map ----
 p_map <- plot_rain_map(
   df_multi      = df_multi,
   shp_path      = SHP_PATH,
@@ -1316,32 +1199,13 @@ if (GHA_MODE) {
   print(p_map)
 }
 
-
-
-
-
 # =============================================================
-# STEP 7 — Lovable artifacts (latest.json + available_runs.json +
-#         points_lite_now_* + points_lite_peak_{12,24,48,72}_*)
-#
-# Lovable fetches from:
-#   https://raw.githubusercontent.com/jessicajcss/WRF_CPTEC_rainfall/main/outputs/...
-#
-# Required (fast path):
-#   outputs/points_lite_now_latest.geojson
-#   outputs/points_lite_peak_12_latest.geojson
-#   outputs/points_lite_peak_24_latest.geojson
-#   outputs/points_lite_peak_48_latest.geojson
-#   outputs/points_lite_peak_72_latest.geojson
-#   outputs/available_runs.json
-#   outputs/latest.json   (must contain geojson_url + points_now_url)
+# STEP 7 — Lovable artifacts (UNCHANGED)
 # =============================================================
 
-# NOTE: %||% is already defined earlier in the script; keep this only if you removed it above.
 `%||%` <- function(a, b) if (!is.null(a)) a else b
 
 compute_heat_weight <- function(rain_mm) {
-  # Must match Lovable: Math.min(Math.sqrt(rainMm)/Math.sqrt(50), 1)
   pmin(sqrt(pmax(rain_mm, 0)) / sqrt(50), 1)
 }
 
@@ -1377,13 +1241,11 @@ build_points_lite_from_nested <- function(nested_geojson_path, mode = c("now", "
       rr <- rr[ok]
 
       if (length(ts) > 0) {
-        # NOW = closest timestamp to now
         diffs <- abs(as.numeric(difftime(ts, nowUtc, units = "secs")))
         i_now <- which.min(diffs)
         rainNow <- rr[i_now]
         nowTsBrt <- paste0(format(ts[i_now], tz = "America/Sao_Paulo", "%d/%m %H:%M"), " BRT")
 
-        # PEAK within windowHours ahead
         in_win <- ts <= windowEnd
         if (any(in_win)) {
           rr_win <- rr[in_win]
@@ -1394,7 +1256,6 @@ build_points_lite_from_nested <- function(nested_geojson_path, mode = c("now", "
         }
       }
     } else {
-      # fallback if arrays missing
       rainNow <- props$rain_mm %||% 0
       peakMm  <- props$max_rain_mm %||% rainNow
     }
@@ -1424,7 +1285,6 @@ build_points_lite_from_nested <- function(nested_geojson_path, mode = c("now", "
 write_points_lite_files <- function(nested_geojson_path, run_dt, out_dir = "outputs", windows = c(12L, 24L, 48L, 72L)) {
   run_id <- format(run_dt, "%Y%m%d%H")
 
-  # NOW (windowHours not used for now-mode, but keep signature consistent)
   now_obj <- build_points_lite_from_nested(nested_geojson_path, mode = "now", windowHours = 24L)
   now_obj$`_meta` <- list(
     run_id = run_id,
@@ -1437,7 +1297,6 @@ write_points_lite_files <- function(nested_geojson_path, run_dt, out_dir = "outp
   jsonlite::write_json(now_obj, now_run_path, auto_unbox = TRUE, pretty = FALSE)
   file.copy(now_run_path, now_latest_path, overwrite = TRUE)
 
-  # PEAK windows (12/24/48/72)
   for (w in windows) {
     peak_obj <- build_points_lite_from_nested(nested_geojson_path, mode = "peak", windowHours = as.integer(w))
     peak_obj$`_meta` <- list(
@@ -1478,16 +1337,11 @@ write_latest_json <- function(run_dt, out_path = "outputs/latest.json") {
   run_id       <- format(run_dt, "%Y%m%d%H")
   generated_at <- format(lubridate::now(tzone = "UTC"), "%Y-%m-%dT%H:%M:%SZ")
 
-  # IMPORTANT: keys must match Lovable src
   latest <- list(
     run_id = run_id,
     cycle  = run_id,
     generated_at = generated_at,
-
-    # Lovable fallback reads this key:
     geojson_url = sprintf("outputs/wrf_cep_forecast_%s_nested.geojson", run_id),
-
-    # Lovable uses this for precomputed now artifacts:
     points_now_url = sprintf("outputs/points_lite_now_%s.geojson", run_id)
   )
 
@@ -1505,12 +1359,10 @@ if (GHA_MODE) {
     stop("Nested GeoJSON not found (expected): ", nested_path)
   }
 
-  # Write all Lovable artifacts
   write_points_lite_files(nested_path, run_dt, out_dir = "outputs", windows = c(12L, 24L, 48L, 72L))
   write_available_runs(run_dt, out_path = "outputs/available_runs.json")
   write_latest_json(run_dt, out_path = "outputs/latest.json")
 
-  # Size safety: keep committed artifacts <100MB
   max_bytes <- 95 * 1024 * 1024
   must_check <- c(
     "outputs/latest.json",
@@ -1529,4 +1381,452 @@ if (GHA_MODE) {
   }
 
   message("Lovable artifacts written for run_id=", run_id)
+}
+
+# =============================================================
+# STEP 8 — GRID EXPORT (hourly rain + temp/wind) + 4 HTML files
+# =============================================================
+
+read_grid_stack_vars <- function(run_dir, verbose = TRUE) {
+  meta <- discover_wrf_files(run_dir)
+  if (!nrow(meta)) stop("No files discovered under: ", run_dir)
+
+  r0 <- terra::rast(meta$file[1])
+  if (terra::nlyr(r0) < 3 || !all(c("precip_acc_mm","t2m_k","wind_gust_ms") %in% names(r0))) {
+    stop("Grid export requires multi-layer *_vars.tif files with names: ",
+         "precip_acc_mm, t2m_k, wind_gust_ms. ",
+         "Re-run crop step; ensure *_vars.tif exist.")
+  }
+
+  ref <- r0[["precip_acc_mm"]]
+  if (!terra::is.lonlat(ref)) ref <- terra::project(ref, "EPSG:4326")
+
+  xy <- terra::xyFromCell(ref, seq_len(terra::ncell(ref)))
+  coords <- data.frame(
+    cell_id = seq_len(nrow(xy)),
+    lon = round(xy[,1], 5),
+    lat = round(xy[,2], 5),
+    stringsAsFactors = FALSE
+  )
+
+  n_cells <- nrow(coords)
+  n_steps <- nrow(meta)
+
+  acc <- matrix(NA_real_, n_cells, n_steps)
+  t2k <- matrix(NA_real_, n_cells, n_steps)
+  wnd <- matrix(NA_real_, n_cells, n_steps)
+
+  for (i in seq_len(n_steps)) {
+    if (verbose) message(sprintf("  grid [%d/%d] h%03d %s (%s)",
+                                 i, n_steps, meta$forecast_hour[i], basename(meta$file[i]), meta$valid_brt_lbl[i]))
+    rr <- terra::rast(meta$file[i])
+
+    p <- rr[["precip_acc_mm"]]
+    t <- rr[["t2m_k"]]
+    w <- rr[["wind_gust_ms"]]
+
+    if (!terra::is.lonlat(p)) p <- terra::project(p, "EPSG:4326")
+    if (!terra::is.lonlat(t)) t <- terra::project(t, "EPSG:4326")
+    if (!terra::is.lonlat(w)) w <- terra::project(w, "EPSG:4326")
+
+    if (!isTRUE(all.equal(terra::ext(p), terra::ext(ref))) || !isTRUE(all.equal(terra::res(p), terra::res(ref))))
+      p <- terra::resample(p, ref, method = "bilinear")
+    if (!isTRUE(all.equal(terra::ext(t), terra::ext(ref))) || !isTRUE(all.equal(terra::res(t), terra::res(ref))))
+      t <- terra::resample(t, ref, method = "bilinear")
+    if (!isTRUE(all.equal(terra::ext(w), terra::ext(ref))) || !isTRUE(all.equal(terra::res(w), terra::res(ref))))
+      w <- terra::resample(w, ref, method = "bilinear")
+
+    acc[, i] <- as.numeric(terra::values(p))
+    t2k[, i] <- as.numeric(terra::values(t))
+    wnd[, i] <- as.numeric(terra::values(w))
+  }
+
+  list(coords = coords, meta = meta, rain_acc = acc, t2m_k = t2k, wind_ms = wnd)
+}
+
+grid_hourly_rain <- function(meta, acc) {
+  n_cells <- nrow(acc)
+  n_steps <- ncol(acc)
+  out <- matrix(NA_real_, n_cells, n_steps)
+
+  for (init in unique(meta$init_utc)) {
+    idx <- which(meta$init_utc == init)
+    idx <- idx[order(meta$forecast_hour[idx])]
+    if (length(idx) < 2) next
+    for (j in seq(2, length(idx))) {
+      out[, idx[j]] <- pmax(0, acc[, idx[j]] - acc[, idx[j-1]])
+    }
+  }
+  out
+}
+
+grid_to_long_hourly <- function(st) {
+  coords <- st$coords; meta <- st$meta
+  acc <- st$rain_acc; t2k <- st$t2m_k; wnd <- st$wind_ms
+
+  rain_hr <- grid_hourly_rain(meta, acc)
+
+  temp_c <- t2k
+  okK <- !is.na(t2k) & t2k > 100
+  temp_c[okK] <- t2k[okK] - 273.15
+
+  n_cells <- nrow(coords); n_steps <- nrow(meta)
+  rows <- vector("list", n_cells * n_steps)
+  k <- 0L
+  for (ci in seq_len(n_cells)) for (j in seq_len(n_steps)) {
+    k <- k + 1L
+    rows[[k]] <- data.frame(
+      cell_id = coords$cell_id[ci],
+      lon = coords$lon[ci],
+      lat = coords$lat[ci],
+      init_utc = fmt_utc_iso(meta$init_utc[j]),
+      valid_utc = fmt_utc_iso(meta$valid_utc[j]),
+      valid_brt = fmt_brt_iso(meta$valid_utc[j]),
+      valid_brt_lbl = meta$valid_brt_lbl[j],
+      forecast_hour = as.integer(meta$forecast_hour[j]),
+      accum_mm = round(acc[ci, j], 3),
+      rain_mm  = round(rain_hr[ci, j], 3),
+      temp_c   = round(temp_c[ci, j], 2),
+      wind_ms  = round(wnd[ci, j], 2),
+      stringsAsFactors = FALSE
+    )
+  }
+  df <- dplyr::bind_rows(rows)
+  df$rain_class <- classify_rain(df$rain_mm)
+  df
+}
+
+export_grid_nested_json_rain <- function(st, run_dt, out_path, max_mb = 95, verbose = TRUE) {
+  if (!requireNamespace("jsonlite", quietly = TRUE)) stop("Package 'jsonlite' required.")
+
+  coords <- st$coords; meta <- st$meta; acc <- st$rain_acc
+  rain_hr <- grid_hourly_rain(meta, acc)
+
+  hours_vec <- as.integer(meta$forecast_hour)
+  valid_utc <- vapply(meta$valid_utc, fmt_utc_iso, character(1))
+  valid_brt <- vapply(meta$valid_utc, fmt_brt_iso, character(1))
+  valid_lbl <- meta$valid_brt_lbl
+
+  sel <- which(rowSums(!is.na(rain_hr)) > 0)
+
+  cells <- lapply(sel, function(ci) {
+    rr <- round(rain_hr[ci, ], 3)
+    aa <- round(acc[ci, ], 3)
+    ok <- !is.na(rr)
+    list(
+      cell_id = as.integer(coords$cell_id[ci]),
+      lon = coords$lon[ci],
+      lat = coords$lat[ci],
+      max_rain_mm = round(max(rr[ok], na.rm = TRUE), 3),
+      total_rain_mm = round(sum(rr[ok], na.rm = TRUE), 3),
+      hours = hours_vec[ok],
+      valid_utc = valid_utc[ok],
+      valid_brt = valid_brt[ok],
+      valid_brt_lbl = valid_lbl[ok],
+      rain_mm = rr[ok],
+      accum_mm = aa[ok],
+      rain_class = classify_rain(rr[ok])
+    )
+  })
+
+  obj <- list(
+    meta = list(
+      run_id = format(run_dt, "%Y%m%d%H"),
+      init_utc = fmt_utc_iso(run_dt),
+      init_brt = fmt_brt_iso(run_dt),
+      init_brt_lbl = fmt_brt_label(run_dt),
+      tz_display = BRT_TZ,
+      n_cells = length(sel),
+      n_steps = length(hours_vec)
+    ),
+    cells = cells
+  )
+
+  jsonlite::write_json(obj, out_path, auto_unbox = TRUE, digits = 6, pretty = FALSE)
+  sz <- file.info(out_path)$size / 1024^2
+  if (verbose) cat(sprintf("  -> %s | %.1f MB\n", basename(out_path), sz))
+
+  if (sz > max_mb) {
+    warning(sprintf("Grid JSON %.1f MB > %.0f MB; removing dry cells (max_rain_mm==0).", sz, max_mb))
+    cells2 <- Filter(function(x) isTRUE(x$max_rain_mm > 0), cells)
+    obj$cells <- cells2
+    obj$meta$n_cells <- length(cells2)
+    obj$meta$dry_cells_removed <- TRUE
+    jsonlite::write_json(obj, out_path, auto_unbox = TRUE, digits = 6, pretty = FALSE)
+    sz2 <- file.info(out_path)$size / 1024^2
+    if (verbose) cat(sprintf("  -> rewritten | %.1f MB\n", sz2))
+  }
+
+  invisible(out_path)
+}
+
+build_leaflet_html <- function(df_grid, run_dt, out_path,
+                               mode = c("tabs", "rain", "temp", "wind"),
+                               verbose = TRUE) {
+  mode <- match.arg(mode)
+
+  if (!requireNamespace("jsonlite", quietly = TRUE)) stop("Package 'jsonlite' required.")
+  if (!requireNamespace("glue", quietly = TRUE)) stop("Package 'glue' required (add to .github/r-packages.txt).")
+
+  hours <- sort(unique(df_grid$forecast_hour))
+  hour_data <- lapply(hours, function(h) {
+    sub <- dplyr::filter(df_grid, forecast_hour == h)
+    list(
+      hour = h,
+      label_brt = if (nrow(sub)) sub$valid_brt_lbl[1] else sprintf("h%02d", h),
+      lon = sub$lon, lat = sub$lat,
+      rain_mm = sub$rain_mm,
+      temp_c  = sub$temp_c,
+      wind_ms = sub$wind_ms
+    )
+  })
+  data_json <- jsonlite::toJSON(hour_data, auto_unbox = TRUE, digits = 4, na = "null")
+
+  map_lon <- mean(df_grid$lon, na.rm = TRUE)
+  map_lat <- mean(df_grid$lat, na.rm = TRUE)
+
+  run_id <- format(run_dt, "%Y%m%d%H")
+  init_brt <- fmt_brt_label(run_dt)
+
+  init_var <- if (mode == "tabs") "rain" else mode
+  show_tabs <- mode == "tabs"
+
+  tabs_html <- if (show_tabs) {
+    '
+  <div class="tabs">
+    <button class="btn active" onclick="setVar(\'rain\', this)">Chuva (mm/h)</button>
+    <button class="btn" onclick="setVar(\'temp\', this)">Temp (°C)</button>
+    <button class="btn" onclick="setVar(\'wind\', this)">Vento (m/s)</button>
+  </div>'
+  } else {
+    sprintf('<div class="meta">Variável: <b>%s</b></div>', init_var)
+  }
+
+  title_suffix <- switch(mode,
+                         tabs = "rain/temp/wind",
+                         rain = "rain",
+                         temp = "temp",
+                         wind = "wind"
+  )
+
+  html <- glue::glue(
+    '<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>WRF SC Grid — {run_id} — {title_suffix}</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+<style>
+  * {{ box-sizing: border-box; margin:0; padding:0; }}
+  body {{ font-family: Arial, sans-serif; background:#0b1220; color:#e5e7eb; height:100vh; display:flex; flex-direction:column; }}
+  #top {{ padding:10px 14px; background:#0f172a; border-bottom:1px solid #1f2937; display:flex; gap:14px; flex-wrap:wrap; align-items:center; }}
+  #top .title {{ font-weight:700; font-size:14px; }}
+  #top .meta {{ font-size:12px; color:#9ca3af; }}
+  #controls {{ padding:10px 14px; background:#0f172a; border-bottom:1px solid #1f2937; display:flex; gap:16px; align-items:center; flex-wrap:wrap; }}
+  .tabs {{ display:flex; gap:6px; }}
+  .btn {{ border:1px solid #334155; background:transparent; color:#cbd5e1; padding:5px 12px; border-radius:999px; cursor:pointer; font-size:12px; }}
+  .btn.active {{ background:#3b82f6; border-color:#3b82f6; color:white; }}
+  .slider {{ display:flex; gap:10px; align-items:center; flex:1; min-width:220px; }}
+  #map {{ flex:1; }}
+  #hourLabel {{ font-weight:700; min-width:140px; }}
+  #legend {{ position:absolute; right:10px; bottom:20px; z-index:1000; background:rgba(15,23,42,0.92); border:1px solid #1f2937; border-radius:10px; padding:10px 12px; font-size:12px; min-width:150px; }}
+</style>
+</head>
+<body>
+<div id="top">
+  <div class="title">WRF/CPTEC — SC — Grade nativa (7 km)</div>
+  <div class="meta">Rodada: <b>{init_brt}</b> (Horário de Brasília)</div>
+</div>
+
+<div id="controls">
+  {tabs_html}
+  <div class="slider">
+    <span>Hora:</span>
+    <input id="hour" type="range" min="0" max="0" value="0" step="1" oninput="setHour(this.value)" style="flex:1"/>
+    <span id="hourLabel">—</span>
+  </div>
+</div>
+
+<div id="map"></div>
+<div id="legend"><div id="legTitle"></div><div id="legBody"></div></div>
+
+<script>
+const DATA = {data_json};
+
+let currentVar = "{init_var}";
+let idx = 0;
+let layerPts = null;
+let layerHeat = null;
+
+const map = L.map("map").setView([{round(map_lat,4)}, {round(map_lon,4)}], 8);
+L.tileLayer("https://{{s}}.basemaps.cartocdn.com/dark_all/{{z}}/{{x}}/{{y}}{{r}}.png",
+  {{attribution:"&copy; OpenStreetMap &copy; CARTO", maxZoom: 18}}).addTo(map);
+
+function rainColor(v) {{
+  if (v === null || isNaN(v)) return "#777";
+  if (v <= 0) return "#c6e2ff";
+  if (v < 2.5) return "#4fc3f7";
+  if (v < 7.5) return "#1976d2";
+  if (v < 35) return "#7b1fa2";
+  return "#b71c1c";
+}}
+function tempColor(v) {{
+  if (v === null || isNaN(v)) return "#777";
+  if (v < 0) return "#440154";
+  if (v < 10) return "#31688e";
+  if (v < 20) return "#35b779";
+  if (v < 30) return "#fde725";
+  return "#ff0000";
+}}
+function windColor(v) {{
+  if (v === null || isNaN(v)) return "#777";
+  if (v < 5) return "#b2dfdb";
+  if (v < 10) return "#26a69a";
+  if (v < 15) return "#f9a825";
+  if (v < 25) return "#e65100";
+  return "#b71c1c";
+}}
+
+function setLegend() {{
+  const t = document.getElementById("legTitle");
+  const b = document.getElementById("legBody");
+  if (currentVar === "rain") {{
+    t.textContent = "mm/h";
+    b.innerHTML = "<div>0: none</div><div>0–2.5: light</div><div>2.5–7.5: moderate</div><div>7.5–35: heavy</div><div>≥35: extreme</div>";
+  }} else if (currentVar === "temp") {{
+    t.textContent = "°C";
+    b.innerHTML = "<div>Roxo (frio) → Vermelho (quente)</div>";
+  }} else {{
+    t.textContent = "m/s";
+    b.innerHTML = "<div>Verde (fraco) → Vermelho (forte)</div>";
+  }}
+}}
+
+function render() {{
+  if (layerPts) map.removeLayer(layerPts);
+  if (layerHeat) map.removeLayer(layerHeat);
+
+  const d = DATA[idx];
+  document.getElementById("hourLabel").textContent = d.label_brt;
+  setLegend();
+
+  if (currentVar === "rain") {{
+    const heat = [];
+    const pts = [];
+    for (let i=0; i<d.lat.length; i++) {{
+      const v = d.rain_mm[i];
+      if (v !== null && !isNaN(v) && v > 0) heat.push([d.lat[i], d.lon[i], Math.min(v/35, 1)]);
+      if (v !== null && !isNaN(v)) pts.push(
+        L.circleMarker([d.lat[i], d.lon[i]], {{radius:4, color:"transparent", fillColor:rainColor(v), fillOpacity:0.65, weight:0}})
+        .bindTooltip(`${v.toFixed(2)} mm/h<br>${d.label_brt}`, {{sticky:true}})
+      );
+    }}
+    if (heat.length && typeof L.heatLayer !== "undefined") {{
+      layerHeat = L.heatLayer(heat, {{radius:18, blur:15, maxZoom:12}}).addTo(map);
+    }}
+    layerPts = L.layerGroup(pts).addTo(map);
+  }} else if (currentVar === "temp") {{
+    const pts = [];
+    for (let i=0; i<d.lat.length; i++) {{
+      const v = d.temp_c[i];
+      if (v === null || isNaN(v)) continue;
+      pts.push(L.circleMarker([d.lat[i], d.lon[i]], {{radius:5, color:"transparent", fillColor:tempColor(v), fillOpacity:0.75, weight:0}})
+        .bindTooltip(`${v.toFixed(1)} °C<br>${d.label_brt}`, {{sticky:true}}));
+    }}
+    layerPts = L.layerGroup(pts).addTo(map);
+  }} else {{
+    const pts = [];
+    for (let i=0; i<d.lat.length; i++) {{
+      const v = d.wind_ms[i];
+      if (v === null || isNaN(v)) continue;
+      pts.push(L.circleMarker([d.lat[i], d.lon[i]], {{radius:5, color:"transparent", fillColor:windColor(v), fillOpacity:0.75, weight:0}})
+        .bindTooltip(`${v.toFixed(1)} m/s<br>${d.label_brt}`, {{sticky:true}}));
+    }}
+    layerPts = L.layerGroup(pts).addTo(map);
+  }}
+}}
+
+function setHour(v) {{
+  idx = parseInt(v);
+  render();
+}}
+
+function setVar(v, el) {{
+  currentVar = v;
+  if (el) {{
+    document.querySelectorAll(".btn").forEach(x=>x.classList.remove("active"));
+    el.classList.add("active");
+  }}
+  render();
+}}
+
+document.getElementById("hour").max = DATA.length - 1;
+render();
+</script>
+</body>
+</html>'
+  )
+
+  writeLines(html, out_path, useBytes = FALSE)
+  if (verbose) cat(sprintf("  -> %s | %.1f MB\n", basename(out_path), file.info(out_path)$size/1024^2))
+  invisible(out_path)
+}
+
+export_grid <- function(run_dir, run_dt, output_dir = "outputs",
+                        export_json = TRUE, export_shp = TRUE, export_html = TRUE,
+                        max_json_mb = 95, verbose = TRUE) {
+  dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
+  stem <- sprintf("wrf_grid_forecast_%s", format(run_dt, "%Y%m%d%H"))
+
+  cat("\n=== STEP 8: Native WRF Grid Export ===\n")
+  st <- read_grid_stack_vars(run_dir, verbose = verbose)
+  df_long <- grid_to_long_hourly(st)
+
+  if (export_json) {
+    out_json <- file.path(output_dir, paste0(stem, "_nested.json"))
+    export_grid_nested_json_rain(st, run_dt, out_json, max_mb = max_json_mb, verbose = verbose)
+  }
+
+  if (export_shp) {
+    shp_dir <- file.path(output_dir, "shp_grid")
+    dir.create(shp_dir, showWarnings = FALSE, recursive = TRUE)
+    shp_file <- file.path(shp_dir, paste0(stem, ".shp"))
+
+    sf_grid <- sf::st_as_sf(df_long, coords = c("lon", "lat"), crs = 4326, remove = FALSE) |>
+      dplyr::rename(fcst_hr = forecast_hour, rain_cls = rain_class, v_brt = valid_brt)
+
+    sf::st_write(sf_grid, dsn = shp_file, driver = "ESRI Shapefile",
+                 layer_options = "ENCODING=UTF-8", delete_dsn = TRUE, quiet = TRUE)
+    writeLines("UTF-8", sub("\\.shp$", ".cpg", shp_file))
+    cat(sprintf("  -> %s | %.1f MB\n", basename(shp_file),
+                sum(file.info(list.files(shp_dir, pattern = paste0(stem, "\\."), full.names = TRUE))$size, na.rm = TRUE)/1024^2))
+  }
+
+  if (export_html) {
+    run_id <- format(run_dt, "%Y%m%d%H")
+    out_tabs <- file.path(output_dir, sprintf("forecast_map_%s.html", run_id))
+    out_rain <- file.path(output_dir, sprintf("forecast_map_rain_%s.html", run_id))
+    out_temp <- file.path(output_dir, sprintf("forecast_map_temp_%s.html", run_id))
+    out_wind <- file.path(output_dir, sprintf("forecast_map_wind_%s.html", run_id))
+
+    build_leaflet_html(df_long, run_dt, out_tabs, mode = "tabs", verbose = verbose)
+    build_leaflet_html(df_long, run_dt, out_rain, mode = "rain", verbose = verbose)
+    build_leaflet_html(df_long, run_dt, out_temp, mode = "temp", verbose = verbose)
+    build_leaflet_html(df_long, run_dt, out_wind, mode = "wind", verbose = verbose)
+  }
+
+  invisible(TRUE)
+}
+
+if (GRID_EXPORT_JSON || GRID_EXPORT_SHP || GRID_EXPORT_HTML) {
+  export_grid(run_dir, run_dt,
+              output_dir  = "outputs",
+              export_json = GRID_EXPORT_JSON,
+              export_shp  = GRID_EXPORT_SHP,
+              export_html = GRID_EXPORT_HTML,
+              max_json_mb = MAX_GRID_JSON_MB,
+              verbose     = TRUE)
 }

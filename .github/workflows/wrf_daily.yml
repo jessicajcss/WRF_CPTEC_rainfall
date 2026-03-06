@@ -2,7 +2,7 @@ name: WRF Daily Rainfall Forecast
 
 on:
   schedule:
-    - cron: '0 6 * * *'   # 06:00 UTC daily
+    - cron: '0 6 * * *'
   workflow_dispatch:
     inputs:
       run_start:
@@ -21,7 +21,7 @@ concurrency:
 jobs:
   forecast:
     runs-on: ubuntu-22.04
-    timeout-minutes: 120
+    timeout-minutes: 210
 
     permissions:
       contents: write
@@ -31,6 +31,7 @@ jobs:
       GHA_MODE:             'true'
       WRF_RUN_START:        ${{ github.event.inputs.run_start }}
       WRF_FORECAST_END_HR:  ${{ github.event.inputs.forecast_end_hr || '72' }}
+      TZ:                   'America/Sao_Paulo'
 
     steps:
       - name: Checkout repository
@@ -46,7 +47,7 @@ jobs:
           r-version: 'release'
           use-public-rspm: true
 
-      - name: Install system dependencies
+      - name: Install system dependencies (GDAL + tippecanoe + fonts)
         run: |
           set -euo pipefail
           sudo apt-get update -qq
@@ -56,7 +57,22 @@ jobs:
             libssl-dev libxml2-dev libfontconfig1-dev \
             libharfbuzz-dev libfribidi-dev libfreetype6-dev \
             libpng-dev libtiff5-dev libjpeg-dev \
-            jq gh
+            jq gh \
+            tippecanoe \
+            fonts-dejavu-core
+
+      - name: Install go-pmtiles CLI
+        run: |
+          set -euo pipefail
+          PMT_VERSION=$(curl -fsSL https://api.github.com/repos/felt/go-pmtiles/releases/latest \
+            | jq -r '.tag_name')
+          echo "Installing go-pmtiles ${PMT_VERSION}"
+          curl -fsSL \
+            "https://github.com/felt/go-pmtiles/releases/download/${PMT_VERSION}/go-pmtiles_${PMT_VERSION}_Linux_x86_64.tar.gz" \
+            | tar -xz -C /tmp
+          sudo mv /tmp/pmtiles /usr/local/bin/pmtiles
+          sudo chmod +x /usr/local/bin/pmtiles
+          pmtiles --version
 
       - name: Cache R packages
         id: r-cache
@@ -73,10 +89,10 @@ jobs:
           set -euo pipefail
           Rscript -e "
           pkgs <- readLines('.github/r-packages.txt')
-          pkgs <- trimws(pkgs)
-          pkgs <- pkgs[nzchar(pkgs) & !startsWith(pkgs, '#')]
-          repos <- 'https://packagemanager.posit.co/cran/__linux__/jammy/latest'
-          install.packages(pkgs, repos = repos, dependencies = TRUE)
+          pkgs <- trimws(pkgs[nzchar(trimws(pkgs)) & !startsWith(trimws(pkgs), '#')])
+          install.packages(pkgs,
+            repos = 'https://packagemanager.posit.co/cran/__linux__/jammy/latest',
+            dependencies = TRUE)
           cat('Installed:', length(pkgs), 'packages\n')
           "
 
@@ -84,154 +100,40 @@ jobs:
         run: |
           set -euo pipefail
           test -f "data/shp/SC_Municipios_2024/SC_Municipios_2024.shp" \
-            || { echo "ERROR: shapefile not found. Commit it to data/shp/"; exit 1; }
+            || { echo "ERROR: shapefile missing at data/shp/SC_Municipios_2024/SC_Municipios_2024.shp"; exit 1; }
           test -f "outputs/cep_list.rds" \
-            || { echo "ERROR: outputs/cep_list.rds not found. Generate via 00_build_cep_list.R and commit it."; exit 1; }
+            || { echo "ERROR: outputs/cep_list.rds missing — run 00_build_cep_list.R first"; exit 1; }
           echo "All required files present."
 
-      - name: Run WRF forecast + build Lovable artifacts
+      - name: Run WRF forecast pipeline
         run: |
           set -euo pipefail
           mkdir -p outputs data/WRF_downloads
           Rscript scripts/00-geojson_output.R 2>&1 | tee outputs/run_log.txt
 
-      - name: Validate expected outputs (Lovable + nested geojson)
+      - name: Validate expected outputs
         run: |
           set -euo pipefail
 
-          # must exist for releases and/or Lovable fallback
+          # CEP nested GeoJSON (goes to Release)
           NESTED=$(ls outputs/wrf_cep_forecast_*_nested.geojson 2>/dev/null | head -1)
-          test -n "$NESTED" || { echo "ERROR: No nested geojson outputs/wrf_cep_forecast_*_nested.geojson found"; exit 1; }
+          test -n "$NESTED" || { echo "ERROR: No CEP nested GeoJSON"; exit 1; }
 
-          # must exist for Lovable fast-path
-          test -f outputs/latest.json || { echo "ERROR: outputs/latest.json missing"; exit 1; }
+          # Grid JSON
+          GRID_JSON=$(ls outputs/wrf_grid_forecast_*_nested.json 2>/dev/null | head -1)
+          test -n "$GRID_JSON" || echo "WARNING: No grid JSON found"
+
+          # Lovable fast-path files (committed to repo)
+          test -f outputs/latest.json         || { echo "ERROR: outputs/latest.json missing"; exit 1; }
           test -f outputs/available_runs.json || { echo "ERROR: outputs/available_runs.json missing"; exit 1; }
-
-          # fast artifacts
-          test -f outputs/points_lite_now_latest.geojson || { echo "ERROR: outputs/points_lite_now_latest.geojson missing"; exit 1; }
-          test -f outputs/points_lite_peak_12_latest.geojson || { echo "ERROR: outputs/points_lite_peak_12_latest.geojson missing"; exit 1; }
-          test -f outputs/points_lite_peak_24_latest.geojson || { echo "ERROR: outputs/points_lite_peak_24_latest.geojson missing"; exit 1; }
-          test -f outputs/points_lite_peak_48_latest.geojson || { echo "ERROR: outputs/points_lite_peak_48_latest.geojson missing"; exit 1; }
-          test -f outputs/points_lite_peak_72_latest.geojson || { echo "ERROR: outputs/points_lite_peak_72_latest.geojson missing"; exit 1; }
-
-      - name: Enforce file size safety limit (<95MB each)
-        run: |
-          set -euo pipefail
-          max=$((95 * 1024 * 1024))
-
-          check() {
-            f="$1"
-            if [ ! -f "$f" ]; then
-              echo "ERROR: missing file for size check: $f"
-              exit 1
-            fi
-            size=$(stat -c%s "$f")
-            echo "$f => $size bytes"
-            if [ "$size" -gt "$max" ]; then
-              echo "ERROR: $f exceeds 95MB safety limit"
-              exit 1
-            fi
-          }
-
-          check outputs/latest.json
-          check outputs/available_runs.json
-          check outputs/points_lite_now_latest.geojson
-          check outputs/points_lite_peak_12_latest.geojson
-          check outputs/points_lite_peak_24_latest.geojson
-          check outputs/points_lite_peak_48_latest.geojson
-          check outputs/points_lite_peak_72_latest.geojson
-
-          # also check nested geojson (committed? no, but still useful to prevent accidental huge files)
-          NESTED=$(ls outputs/wrf_cep_forecast_*_nested.geojson 2>/dev/null | head -1)
-          check "$NESTED"
-
-      - name: Create GitHub Release and upload 72h nested GeoJSON gz
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          GEOJSON=$(ls outputs/wrf_cep_forecast_*_nested.geojson 2>/dev/null | head -1)
-          if [ -z "$GEOJSON" ]; then
-            echo "No GeoJSON found, skipping release upload."
-            exit 0
-          fi
-
-          RUN_ID=$(basename "$GEOJSON" | grep -oP '\d{10}')
-          if [ -z "$RUN_ID" ]; then
-            echo "ERROR: Could not extract RUN_ID from filename: $GEOJSON"
-            exit 1
-          fi
-
-          GZ_FILE="${GEOJSON}.gz"
-          TAG="wrf-${RUN_ID}"
-
-          gzip -k "$GEOJSON"
-
-          # recreate the release to ensure correct asset every run
-          gh release delete "$TAG" --yes 2>/dev/null || true
-          git push --delete origin "$TAG" 2>/dev/null || true
-
-          gh release create "$TAG" \
-            --title "WRF forecast ${RUN_ID}" \
-            --notes "Automated WRF CPTEC rainfall forecast for run ${RUN_ID}. Nested GeoJSON (gzip compressed)." \
-            --latest=false \
-            "$GZ_FILE"
-
-          echo "Release created: $TAG"
-          echo "RUN_ID=${RUN_ID}" >> $GITHUB_ENV
-
-      - name: Keep only 7 most recent wrf-* releases (delete release + tag)
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          mapfile -t tags < <(gh release list --limit 200 --json tagName,createdAt \
-            --jq '.[] | select(.tagName|startswith("wrf-")) | [.createdAt,.tagName] | @tsv' \
-            | sort -r | awk '{print $2}')
-
-          echo "Found ${#tags[@]} wrf-* releases"
-          if [ "${#tags[@]}" -le 7 ]; then
-            echo "No pruning needed."
-            exit 0
-          fi
-
-          for ((i=7; i<${#tags[@]}; i++)); do
-            old="${tags[$i]}"
-            echo "Deleting old release+tag: $old"
-            gh release delete "$old" --yes --cleanup-tag
+          for w in now peak_12 peak_24 peak_48 peak_72; do
+            f="outputs/points_lite_${w}_latest.geojson"
+            test -f "$f" || { echo "ERROR: $f missing"; exit 1; }
           done
 
-      - name: Upload workflow artifacts (debug, 30 days)
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: wrf-forecast-${{ github.run_number }}
-          path: |
-            outputs/*.geojson
-            outputs/*.geojson.gz
-            outputs/*.json
-            outputs/*.png
-            outputs/run_log.txt
-          retention-days: 30
-
-      - name: Commit Lovable outputs (small files only)
-        run: |
-          set -euo pipefail
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          # commit ONLY small artifacts needed by Lovable; do NOT commit the big nested geojson
-          git add \
-            outputs/latest.json \
-            outputs/available_runs.json \
-            outputs/points_lite_*.geojson \
-            outputs/*.png \
-            outputs/run_log.txt 2>/dev/null || true
-
-          if git diff --staged --quiet; then
-            echo "No changes to commit (artifacts unchanged)."
+          # HTML map
+          HTML=$(ls outputs/forecast_map_*.html 2>/dev/null | head -1)
+          if [ -z "$HTML" ]; then
+            echo "WARNING: No HTML map found."
           else
-            RUN_LABEL=$(date -u +'%Y-%m-%d %H:%M UTC')
-            git commit -m "forecast: update Lovable artifacts ${RUN_LABEL} [skip ci]"
-            git push
-          fi
+            echo "HTML map: $HTML ($(du -sh "$

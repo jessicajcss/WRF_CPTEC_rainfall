@@ -24,3 +24,6 @@ tibble
 viridis
 cli
 ragg
+glue
+leaflet
+leaflet.extras2
