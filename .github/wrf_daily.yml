@@ -2,8 +2,7 @@ name: WRF Daily Rainfall Forecast
 
 on:
   schedule:
-    # keep disabled unless you want it enabled:
-    # - cron: '0 8 * * *'
+    - cron: '0 6 * * *'
   workflow_dispatch:
     inputs:
       run_start:
@@ -22,32 +21,35 @@ concurrency:
 jobs:
   forecast:
     runs-on: ubuntu-22.04
-    timeout-minutes: 150
+    timeout-minutes: 210
 
     permissions:
       contents: write
 
     env:
-      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
-      GHA_MODE: 'true'
-      WRF_RUN_START: ${{ github.event.inputs.run_start }}
-      WRF_FORECAST_END_HR: ${{ github.event.inputs.forecast_end_hr || '72' }}
-      TZ: 'America/Sao_Paulo'
+      GITHUB_PAT:           ${{ secrets.GITHUB_TOKEN }}
+      GHA_MODE:             'true'
+      WRF_RUN_START:        ${{ github.event.inputs.run_start }}
+      WRF_FORECAST_END_HR:  ${{ github.event.inputs.forecast_end_hr || '72' }}
+      TZ:                   'America/Sao_Paulo'
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
       - name: Setup R
+        id: setup-r
         uses: r-lib/actions/setup-r@v2
         with:
           r-version: 'release'
           use-public-rspm: true
 
-      - name: Install system dependencies
+      - name: Install system dependencies (GDAL + tippecanoe + fonts)
         run: |
+          set -euo pipefail
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
             libgdal-dev libgeos-dev libproj-dev \
@@ -55,7 +57,22 @@ jobs:
             libssl-dev libxml2-dev libfontconfig1-dev \
             libharfbuzz-dev libfribidi-dev libfreetype6-dev \
             libpng-dev libtiff5-dev libjpeg-dev \
-            jq
+            jq gh \
+            tippecanoe \
+            fonts-dejavu-core
+
+      - name: Install go-pmtiles CLI
+        run: |
+          set -euo pipefail
+          PMT_VERSION=$(curl -fsSL https://api.github.com/repos/felt/go-pmtiles/releases/latest \
+            | jq -r '.tag_name')
+          echo "Installing go-pmtiles ${PMT_VERSION}"
+          curl -fsSL \
+            "https://github.com/felt/go-pmtiles/releases/download/${PMT_VERSION}/go-pmtiles_${PMT_VERSION}_Linux_x86_64.tar.gz" \
+            | tar -xz -C /tmp
+          sudo mv /tmp/pmtiles /usr/local/bin/pmtiles
+          sudo chmod +x /usr/local/bin/pmtiles
+          pmtiles --version
 
       - name: Cache R packages
         id: r-cache
@@ -69,53 +86,97 @@ jobs:
       - name: Install R packages
         if: steps.r-cache.outputs.cache-hit != 'true'
         run: |
+          set -euo pipefail
           Rscript -e "
           pkgs <- readLines('.github/r-packages.txt')
-          pkgs <- trimws(pkgs)
-          pkgs <- pkgs[nzchar(pkgs) & !startsWith(pkgs, '#')]
-          repos <- 'https://packagemanager.posit.co/cran/__linux__/jammy/latest'
-          install.packages(pkgs, repos = repos, dependencies = TRUE)
+          pkgs <- trimws(pkgs[nzchar(trimws(pkgs)) & !startsWith(trimws(pkgs), '#')])
+          install.packages(pkgs,
+            repos = 'https://packagemanager.posit.co/cran/__linux__/jammy/latest',
+            dependencies = TRUE)
           cat('Installed:', length(pkgs), 'packages\n')
           "
 
       - name: Check required repo files
         run: |
-          echo "--- Checking required files ---"
+          set -euo pipefail
           test -f "data/shp/SC_Municipios_2024/SC_Municipios_2024.shp" \
-            || { echo "ERROR: shapefile not found."; exit 1; }
+            || { echo "ERROR: shapefile missing at data/shp/SC_Municipios_2024/SC_Municipios_2024.shp"; exit 1; }
           test -f "outputs/cep_list.rds" \
-            || { echo "ERROR: outputs/cep_list.rds not found."; exit 1; }
+            || { echo "ERROR: outputs/cep_list.rds missing — run 00_build_cep_list.R first"; exit 1; }
           echo "All required files present."
 
-      - name: Run forecast pipeline
+      - name: Run WRF forecast pipeline
         run: |
+          set -euo pipefail
           mkdir -p outputs data/WRF_downloads
           Rscript scripts/00-geojson_output.R 2>&1 | tee outputs/run_log.txt
 
-      - name: Upload forecast artifacts
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: wrf-forecast-${{ github.run_number }}
-          path: |
-            outputs/*.geojson
-            outputs/*.json
-            outputs/*.html
-            outputs/*.png
-            outputs/run_log.txt
-          retention-days: 30
-
-      - name: Commit forecast outputs
+      - name: Validate expected outputs + size guards (<100MB)
         run: |
+          set -euo pipefail
+
+          # Lovable fast-path files (committed to repo)
+          test -f outputs/latest.json         || { echo "ERROR: outputs/latest.json missing"; exit 1; }
+          test -f outputs/available_runs.json || { echo "ERROR: outputs/available_runs.json missing"; exit 1; }
+          for w in now peak_12 peak_24 peak_48 peak_72; do
+            f="outputs/points_lite_${w}_latest.geojson"
+            test -f "$f" || { echo "ERROR: $f missing"; exit 1; }
+          done
+
+          # HTML maps (at least one)
+          HTML=$(ls outputs/forecast_map_*.html 2>/dev/null | head -1 || true)
+          if [ -z "$HTML" ]; then
+            echo "WARNING: No HTML map found."
+          else
+            echo "HTML map: $HTML"
+          fi
+
+          # Grid JSON optional
+          GRID_JSON=$(ls outputs/wrf_grid_forecast_*_nested.json 2>/dev/null | head -1 || true)
+          if [ -n "$GRID_JSON" ]; then
+            echo "Grid JSON: $GRID_JSON"
+          fi
+
+          # PMTiles optional
+          PMT=$(ls outputs/*.pmtiles 2>/dev/null | head -1 || true)
+          if [ -n "$PMT" ]; then
+            echo "PMTiles: $PMT"
+          fi
+
+          # size guard for committed artifacts
+          MAX_BYTES=$((95 * 1024 * 1024))
+          files=$(ls -1 outputs/latest.json outputs/available_runs.json outputs/points_lite_*_latest.geojson 2>/dev/null || true)
+          files="$files $(ls -1 outputs/forecast_map_*.html 2>/dev/null || true)"
+          files="$files $(ls -1 outputs/*.pmtiles 2>/dev/null || true)"
+          files="$files $(ls -1 outputs/wrf_grid_forecast_*_nested.json 2>/dev/null || true)"
+
+          for f in $files; do
+            if [ ! -f "$f" ]; then continue; fi
+            sz=$(stat -c%s "$f")
+            echo "Size check: $f = $((sz/1024/1024)) MB"
+            if [ "$sz" -gt "$MAX_BYTES" ]; then
+              echo "ERROR: Artifact too large (>95MB): $f"
+              exit 1
+            fi
+          done
+
+      - name: Commit outputs to repository
+        run: |
+          set -euo pipefail
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git add outputs/*.geojson outputs/*.json outputs/*.html outputs/*.png outputs/run_log.txt 2>/dev/null || true
+          # Commit only the "latest" fast-path artifacts + html + pmtiles + available_runs/latest
+          git add -A outputs/latest.json outputs/available_runs.json outputs/run_log.txt || true
+          git add -A outputs/points_lite_*_latest.geojson || true
+          git add -A outputs/forecast_map_*.html || true
+          git add -A outputs/*.pmtiles || true
+          git add -A outputs/wrf_grid_forecast_*_nested.json || true
 
-          if git diff --staged --quiet; then
+          if git diff --cached --quiet; then
             echo "No changes to commit."
-          else
-            RUN_LABEL=$(date -u +'%Y-%m-%d %H:%M UTC')
-            git commit -m "forecast: update ${RUN_LABEL} [skip ci]"
-            git push
+            exit 0
           fi
+
+          git commit -m "Update WRF outputs (latest artifacts)"
+          git push
